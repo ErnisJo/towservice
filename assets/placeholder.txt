@@ -1,0 +1,1 @@
+Placeholder asset. Replace with app icon at ./assets/icon.png and splash at ./assets/splash.png

@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "TowService",
+    "slug": "tow-service",
+    "version": "1.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "orientation": "portrait",
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.towservice.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_MAPS_API_KEY"
+        }
+      }
+    },
+    "extra": {
+      "mapTiles": {
+        "provider": "maptiler",
+        "apiKey": "YOUR_MAPTILER_API_KEY",
+        "style": "streets"
+      },
+      "eas": {
+        "projectId": "59139523-09db-4fd5-a584-c6d34aeb9661"
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tow Service — Быстрый Preview</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 40px; color:#222 }
+      .card { border: 1px solid #e1e1e1; padding: 20px; border-radius: 8px; max-width: 780px }
+      h1 { margin: 0 0 8px }
+      p { margin: 8px 0 }
+      pre { background:#f6f8fa; padding:12px; border-radius:6px; overflow:auto }
+      .actions { margin-top: 16px }
+      .note { color:#555; font-size:0.9rem }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Tow Service — быстрый локальный preview</h1>
+      <p>Я добавил этот файл чтобы вы могли быстро увидеть простую тестовую страницу без запуска Expo.</p>
+
+      <h3>Что здесь</h3>
+      <ul>
+        <li>Короткое описание проекта и состояние — временный плейсхолдер.</li>
+        <li>Инструкции, как открыть страницу в браузере или поднять файл на локальном http-сервере.</li>
+      </ul>
+
+      <h3>Как открыть (PowerShell)</h3>
+      <div class="actions">
+        <pre>Start-Process "quick_preview.html"</pre>
+        <p class="note">Или открыть файл двойным щелчком в Проводнике.</p>
+      </div>
+
+      <h3>Как поднять простой http-сервер (опционально)</h3>
+      <pre>Set-Location -Path "c:\Users\User\Desktop\app1"; npx http-server -p 8000</pre>
+      <p class="note">После этого откройте http://localhost:8000/quick_preview.html</p>
+
+      <h3>Дальше</h3>
+      <p>Если нужно, я могу:</p>
+      <ul>
+        <li>восстановить рабочую конфигурацию Expo и полностью запустить dev‑сервер;</li>
+        <li>создать минимальный бэкенд-заглушку для приёма заявок;</li>
+        <li>добавить placeholder-иконки и сплэш.</li>
+      </ul>
+    </div>
+  </body>
+</html>

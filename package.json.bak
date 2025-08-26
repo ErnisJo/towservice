@@ -1,0 +1,24 @@
+{
+  "name": "tow-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-navigation/native": "^6.1.6",
+    "@react-navigation/stack": "^6.3.16",
+    "expo": "^53.0.22",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.71.14",
+    "react-native-web": "~0.18.11"
+  },
+  "devDependencies": {
+    "babel-preset-expo": "~13.0.0"
+  }
+}
