@@ -19,22 +19,18 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyDdr4AV4aYNTTgsOKRIY5PYgGgXJHx7dbE"
-        }
-      }
+      ]
     },
     "extra": {
-      "mapTiles": {
-        "provider": "maptiler",
-        "apiKey": "YOUR_MAPTILER_API_KEY",
-        "style": "streets"
+      "mapProvider": "web",
+      "yandex": {
+  "apiKey": "b096e152-d41c-4823-ace3-b2f0e6cc8004",
+  "mapType": "yandex#satellite"
       },
       "eas": {
         "projectId": "59139523-09db-4fd5-a584-c6d34aeb9661"
-      }
+    },
+    "apiBase": "http://localhost:4001"
     }
   }
 }

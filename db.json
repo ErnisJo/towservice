@@ -1,0 +1,211 @@
+{
+  "tariff": {
+    "base": 1600,
+    "perKm": 40,
+    "per3min": 10
+  },
+  "orders": [
+    {
+      "id": "gzgISJ9OyiqNYHNPdOHkG",
+      "createdAt": 1756587522089,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "startCoords": {
+        "latitude": 42.9140709,
+        "longitude": 74.4662268
+      },
+      "destCoords": {
+        "latitude": 42.92106425155038,
+        "longitude": 74.46598656173492
+      },
+      "distance": 954.9151615125393,
+      "duration": 238.72879037813482,
+      "cost": 1660,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T17:54:19.462Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    },
+    {
+      "id": "s7HMWXWzo_dKYnlbYOZSw",
+      "createdAt": 1756587319633,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "startCoords": {
+        "latitude": 42.9140729,
+        "longitude": 74.4662244
+      },
+      "destCoords": {
+        "latitude": 42.92106425155038,
+        "longitude": 74.46598656173492
+      },
+      "distance": 918.8830925981283,
+      "duration": 229.72077314953208,
+      "cost": 1660,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T17:50:57.019Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    },
+    {
+      "id": "_4mcuvBh4_oHF9Km2AiAD",
+      "createdAt": 1756587217103,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 13-я улица",
+      "startCoords": {
+        "latitude": 42.9140729,
+        "longitude": 74.4662244
+      },
+      "destCoords": {
+        "latitude": 42.92106425155038,
+        "longitude": 74.46598656173492
+      },
+      "distance": 918.8830925981283,
+      "duration": 229.72077314953208,
+      "cost": 1660,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T17:49:14.499Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    },
+    {
+      "id": "phYgxrG56KtsuZbl9Yul0",
+      "createdAt": 1756586943665,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 82",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 82",
+      "startCoords": {
+        "latitude": 42.9140729,
+        "longitude": 74.4662244
+      },
+      "destCoords": {
+        "latitude": 42.92168057810006,
+        "longitude": 74.46533507939591
+      },
+      "distance": 989.2270468981787,
+      "duration": 247.30676172454469,
+      "cost": 1660,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T17:44:41.055Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    },
+    {
+      "id": "Adktfl6H9Km6L7VegPxLz",
+      "createdAt": 1756586679743,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 71",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 71",
+      "startCoords": {
+        "latitude": 42.9140729,
+        "longitude": 74.4662244
+      },
+      "destCoords": {
+        "latitude": 42.92241978872575,
+        "longitude": 74.46512143780357
+      },
+      "distance": 1029.513235352361,
+      "duration": 255.7876606929786,
+      "cost": 1700,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T17:40:17.144Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "gtMPppeDj69gu__naSyh5",
+      "phone": "0223550868",
+      "name": "Эрнис",
+      "role": "customer",
+      "createdAt": 1756585154034
+    }
+  ],
+  "drivers": [],
+  "authCodes": [],
+  "sessions": [
+    {
+      "token": "qml8bZdiUsQU6YcYR5HIH",
+      "userId": "gtMPppeDj69gu__naSyh5",
+      "createdAt": 1756585154034,
+      "expiresAt": 1759177154034
+    },
+    {
+      "token": "w-YrLrLKA5ySwE_MtmnPE",
+      "userId": "11mBsK64I17a5j_TPKXEB",
+      "createdAt": 1756584332573,
+      "expiresAt": 1759176332573
+    },
+    {
+      "token": "XCJYFJKDYC1liN69olfN1",
+      "userId": "Z47LfshenTrrzyUXIievd",
+      "createdAt": 1756582715996,
+      "expiresAt": 1759174715996
+    }
+  ],
+  "settings": {
+    "support": {
+      "phone": "+996 555 000-000",
+      "email": "support@example.com"
+    },
+    "info": {
+      "about": "Сервис вызова эвакуатора.",
+      "version": "1.0",
+      "company": "Tow Service"
+    }
+  }
+}

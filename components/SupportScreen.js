@@ -1,17 +1,63 @@
-import React from 'react';
-import { View, Text, StyleSheet, Linking, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Linking, TouchableOpacity, ActivityIndicator, NativeModules, Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { useFocusEffect } from '@react-navigation/native';
+import ChatScreen from './ChatScreen';
 
 export default function SupportScreen() {
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('support@example.com');
+
+  useEffect(() => { setLoading(true); }, []);
+
+  const getApiBase = () => {
+    const cfg = Constants?.expoConfig?.extra?.apiBase || 'http://localhost:4001';
+    if (/localhost|127\.0\.0\.1/.test(cfg) && Platform.OS !== 'web') {
+      try {
+        const scriptURL = NativeModules?.SourceCode?.scriptURL || '';
+        const m = scriptURL && scriptURL.match(/^(https?:)\/\/(.*?):\d+/);
+        if (m) return `${m[1]}//${m[2]}:4001`;
+      } catch {}
+    }
+    return cfg;
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      let timer = null;
+      const run = async () => {
+        try {
+          const base = getApiBase();
+          const res = await fetch(base + '/support?t=' + Date.now(), { cache: 'no-store' });
+          if (res.ok) {
+            const j = await res.json();
+            if (!cancelled) {
+              if (j?.email) setEmail(j.email);
+            }
+          }
+        } catch {}
+        finally { if (!cancelled) setLoading(false); }
+      };
+      run();
+      // Poll every 5s while screen is focused
+      timer = setInterval(run, 5000);
+      return () => { cancelled = true; if (timer) clearInterval(timer); };
+    }, [])
+  );
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Служба поддержки</Text>
-      <Text style={styles.text}>Если у вас есть вопросы, свяжитесь с нами:</Text>
-      <TouchableOpacity onPress={() => Linking.openURL('tel:+70000000000')} style={styles.btn}>
-        <Text style={styles.btnText}>Позвонить: +7 000 000-00-00</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => Linking.openURL('mailto:support@example.com')} style={styles.btnOutline}>
-        <Text style={styles.btnOutlineText}>Написать: support@example.com</Text>
-      </TouchableOpacity>
+  <Text style={styles.text}>Если у вас есть вопросы, напишите нам на email или в чат ниже:</Text>
+      {loading ? <ActivityIndicator /> : (
+        <TouchableOpacity onPress={() => Linking.openURL(`mailto:${email}`)} style={styles.btn}>
+          <Text style={styles.btnText}>Email: {email}</Text>
+        </TouchableOpacity>
+      )}
+      <View style={{ flex: 1, alignSelf: 'stretch', marginTop: 12 }}>
+        <ChatScreen />
+      </View>
     </View>
   );
 }

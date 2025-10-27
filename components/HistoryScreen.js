@@ -1,23 +1,45 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, BackHandler, RefreshControl } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { Platform, NativeModules } from 'react-native';
+import Constants from 'expo-constants';
+import { getApiBase } from '../utils/apiBase';
 
 export default function HistoryScreen() {
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation();
+
+  const getApiBaseMemo = useCallback(() => getApiBase(), []);
 
   const load = useCallback(async () => {
     try {
-      const raw = await AsyncStorage.getItem('tow_requests');
-      const list = raw ? JSON.parse(raw) : [];
-      setItems(list);
-    } catch (e) {
-      // ignore
-    }
-  }, []);
+      const base = getApiBaseMemo();
+      const rawUser = await AsyncStorage.getItem('tow_user');
+      const user = rawUser ? JSON.parse(rawUser) : null;
+      const uid = user?.id;
+      if (!uid) { setItems([]); return; }
+      const token = await AsyncStorage.getItem('tow_token');
+      const res = await fetch(base + `/users/${uid}/orders?t=` + Date.now(), { cache: 'no-store', headers: { ...(token ? { 'Authorization': 'Bearer ' + token } : {}) } });
+      if (res.ok) {
+        const list = await res.json();
+        const arr = Array.isArray(list) ? list : [];
+        setItems(arr);
+    return;
+      }
+    } catch (_) {}
+  // No local fallback — show empty
+  setItems([])
+  }, [getApiBaseMemo]);
 
   useEffect(() => {
+    // Purge any old local caches (server-only policy)
+    (async () => {
+      try { await AsyncStorage.removeItem('tow_requests'); } catch {}
+      try { await AsyncStorage.removeItem('tow_my_orders'); } catch {}
+    })();
     load();
   }, [load]);
 
@@ -25,8 +47,21 @@ export default function HistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+      // Перехватываем аппаратную кнопку «назад» на корневом экране истории,
+      // для выхода на главную через BridgeToHome с анимацией слайда
+      const onBack = () => {
+        navigation.push('BridgeToHome');
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => {
+        sub.remove();
+      };
+    }, [load, navigation])
   );
+
+  // Кнопку «назад» задаём централизованно в навигации (DrawerNavigator) —
+  // здесь не переопределяем, чтобы избежать гонок и двойных обработчиков
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -34,16 +69,42 @@ export default function HistoryScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{item.location || 'Без адреса'}</Text>
-  {!!item.notes && <Text style={styles.cardText}>Комментарий: {item.notes}</Text>}
-      <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleString()}</Text>
-    </View>
-  );
+  const renderItem = ({ item }) => {
+    const cost = (typeof item.cost === 'number' && isFinite(item.cost)) ? item.cost : (typeof item.finalCost === 'number' && isFinite(item.finalCost) ? item.finalCost : null);
+    const clean = (s) => {
+      if (!s) return '';
+      return String(s)
+        .replace(/,?\s*[^,]*\bобл(?:\.|асть)?\b[^,]*/i, '')
+        .replace(/\s+,/g, ',')
+        .replace(/,+\s*$/, '')
+        .trim();
+    };
+    let titleText = '';
+    if (item.address) {
+      titleText = clean(item.address);
+    } else if (item.fromAddress || item.toAddress) {
+      const a = item.fromAddress ? clean(item.fromAddress) : 'Точка A';
+      const b = item.toAddress ? clean(item.toAddress) : 'Точка B';
+      titleText = `${a} → ${b}`;
+    } else if (typeof item.location === 'string' && item.location) {
+      // обратная совместимость со старыми заказами
+      titleText = clean(item.location.replace(/\bA:\s*/i, '').replace(/\bB:\s*/i, '')) || 'Без адреса';
+    } else {
+      titleText = 'Без адреса';
+    }
+    const note = item?.details?.notes ?? item?.notes;
+    return (
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => navigation.navigate('OrderDetails', { id: item.id })}>
+        <Text style={styles.cardTitle}>{titleText}</Text>
+        {cost != null && <Text style={styles.cardText}>Сумма: {cost} сом</Text>}
+        {note ? <Text style={styles.cardText}>Комментарий: {note}</Text> : null}
+        <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleString()}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+  <View style={styles.container}>
       <Text style={styles.title}>История заказов</Text>
       {items.length === 0 ? (
         <Text style={styles.text}>Пока нет сохранённых заявок.</Text>

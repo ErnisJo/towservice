@@ -1,0 +1,88 @@
+{
+  "tariff": {
+    "base": 1700,
+    "perKm": 100,
+    "per3min": 10
+  },
+  "orders": [
+    {
+      "id": "5nt_ADAsPYY9Xg6br5tMG",
+      "createdAt": 1756581007619,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 4-я улица, 32",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 4-я улица, 32",
+      "startCoords": {
+        "latitude": 42.9140732,
+        "longitude": 74.4662368
+      },
+      "destCoords": {
+        "latitude": 42.92477142349352,
+        "longitude": 74.46512952701694
+      },
+      "distance": null,
+      "duration": null,
+      "cost": 1700,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T16:05:45.273Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    },
+    {
+      "id": "lGRks3866R5MrZcbsNk36",
+      "createdAt": 1756580938647,
+      "address": "A: Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321 → B: Чуйская область, Сокулукский район, село Луч, 7-я улица",
+      "fromAddress": "Кыргызстан, Чуйская область, Сокулукский район, село Луч, 321",
+      "toAddress": "Чуйская область, Сокулукский район, село Луч, 7-я улица",
+      "startCoords": {
+        "latitude": 42.9140732,
+        "longitude": 74.4662368
+      },
+      "destCoords": {
+        "latitude": 42.92477142349352,
+        "longitude": 74.46512952701694
+      },
+      "distance": 1369.7598572589702,
+      "duration": 342.43996431474255,
+      "cost": 1920,
+      "meta": {
+        "distanceKm": null,
+        "createdAtIso": "2025-08-30T16:04:36.212Z"
+      },
+      "details": {
+        "driverName": null,
+        "vehicleMake": null,
+        "vehicleModel": null,
+        "plateNumber": null,
+        "vehicleColor": null,
+        "notes": "",
+        "startedAt": null,
+        "arrivedAt": null
+      }
+    }
+  ],
+  "settings": {
+    "support": {
+      "phone": "+996 223550868",
+      "email": "ernis_wkf_97@mail.ru"
+    },
+    "info": {
+      "about": "Сервис вызова эвакуатора",
+      "version": "1.0",
+      "company": "Tow Service "
+    }
+  },
+  "users": [],
+  "drivers": [],
+  "authCodes": [],
+  "sessions": []
+}

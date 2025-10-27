@@ -1,0 +1,89 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install Russian Language Pack",
+      "type": "shell",
+      "command": "code --install-extension MS-CEINTL.vscode-language-pack-ru; echo Installed || echo 'If the command failed, install the extension from the Extensions view.'",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Set VSCode UI to Russian (instructions)",
+      "type": "shell",
+      "command": "echo Please open the Command Palette (Ctrl+Shift+P) and run: Configure Display Language -> select 'Русский' (ru) ; echo If prompted, restart VS Code.",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "api:install+run",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				".\\.venv\\Scripts\\Activate.ps1; pip install -r server_py\\requirements.txt; python server_py\\main.py"
+			],
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": ["$python"]
+		},
+		{
+			"label": "api:run",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				".\\.venv\\Scripts\\Activate.ps1; python server_py\\main.py"
+			],
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": ["$python"]
+		},
+		{
+			"label": "expo:dev",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"$env:CHOKIDAR_USEPOLLING='1'; cd 'c:\\Users\\User\\Desktop\\app1'; npx expo start --port 19003"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "admin:dev",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"cd 'c:\\Users\\User\\Desktop\\app1\\admin'; npm run dev"
+			],
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": ["$tsc"]
+		}
+	]
+}
