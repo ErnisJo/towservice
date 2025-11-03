@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Эвакуатор - Современный</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1a202c;
+      overflow: hidden;
+    }
+
+    .app-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Карта */
+    .map-area {
+      flex: 1;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .map-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: rgba(255,255,255,0.9);
+      position: relative;
+      background: 
+        radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+        linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* Маркеры с анимацией */
+    .marker {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .marker::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: inherit;
+      animation: ripple 2s ease-out infinite;
+    }
+
+    .marker.blue {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+      left: 40%;
+      top: 45%;
+    }
+
+    .marker.black {
+      background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+      box-shadow: 0 8px 32px rgba(26, 32, 44, 0.4);
+      left: 60%;
+      top: 35%;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes ripple {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(2);
+        opacity: 0;
+      }
+    }
+
+    /* Glassmorphism элементы */
+    .glass {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Зум контролы */
+    .zoom-controls {
+      position: absolute;
+      right: 20px;
+      top: 90px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .zoom-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      font-size: 28px;
+      font-weight: 300;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .zoom-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .zoom-btn:active {
+      transform: translateY(0);
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Кнопка центрирования */
+    .center-btn {
+      position: absolute;
+      left: 20px;
+      top: 90px;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+      color: white;
+    }
+
+    .center-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px) rotate(90deg);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .center-btn:active {
+      transform: translateY(0) rotate(90deg);
+    }
+
+    /* Нижняя панель */
+    .input-panel {
+      background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: 24px 20px 28px;
+      border-radius: 32px 32px 0 0;
+      box-shadow: 
+        0 -20px 60px rgba(0, 0, 0, 0.15),
+        0 -1px 0 rgba(255, 255, 255, 0.5) inset;
+    }
+
+    /* Информация о маршруте */
+    .route-info {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      border-radius: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .route-info::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: shine 3s ease-in-out infinite;
+    }
+
+    @keyframes shine {
+      0%, 100% { transform: translate(-50%, -50%); }
+      50% { transform: translate(0, 0); }
+    }
+
+    .route-details {
+      display: flex;
+      justify-content: space-around;
+      font-size: 14px;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .route-detail {
+      text-align: center;
+    }
+
+    .route-label {
+      color: rgba(255,255,255,0.8);
+      font-size: 13px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .route-value {
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.5px;
+    }
+
+    .route-cost {
+      text-align: center;
+      font-size: 15px;
+      margin-top: 12px;
+      position: relative;
+      z-index: 1;
+      font-weight: 500;
+    }
+
+    .route-cost span {
+      font-weight: 800;
+      font-size: 24px;
+      display: block;
+      margin-top: 4px;
+      letter-spacing: -1px;
+    }
+
+    /* Подсказки */
+    .suggestions {
+      background: white;
+      border-radius: 20px;
+      padding: 8px;
+      margin-bottom: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+      max-height: 220px;
+      overflow-y: auto;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .suggestion-item {
+      padding: 16px;
+      margin-bottom: 6px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #f6f8fb 0%, #ffffff 100%);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid transparent;
+    }
+
+    .suggestion-item:hover {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      transform: translateX(4px);
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+    }
+
+    .suggestion-item:hover .suggestion-subtitle {
+      color: rgba(255,255,255,0.9);
+    }
+
+    .suggestion-title {
+      font-weight: 600;
+      color: #1a202c;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+
+    .suggestion-item:hover .suggestion-title {
+      color: white;
+    }
+
+    .suggestion-subtitle {
+      font-size: 13px;
+      color: #718096;
+    }
+
+    /* Инпуты */
+    .input-group {
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 18px 50px 18px 24px;
+      border: 2px solid transparent;
+      border-radius: 20px;
+      background: white;
+      font-size: 16px;
+      color: #1a202c;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      transition: all 0.3s ease;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 
+        0 8px 30px rgba(102, 126, 234, 0.2),
+        0 0 0 4px rgba(102, 126, 234, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .input-field::placeholder {
+      color: #a0aec0;
+    }
+
+    .clear-btn {
+      position: absolute;
+      right: 14px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #fc6c85 0%, #f5576c 100%);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
+      transition: all 0.2s ease;
+      opacity: 0;
+      transform: scale(0.8);
+    }
+
+    .input-field:not(:placeholder-shown) ~ .clear-btn {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .clear-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(245, 87, 108, 0.4);
+    }
+
+    .clear-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Кнопки действий */
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 18px;
+      border: none;
+      border-radius: 20px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      letter-spacing: 0.3px;
+    }
+
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      transition: left 0.5s;
+    }
+
+    .btn:hover::before {
+      left: 100%;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 14px 40px rgba(102, 126, 234, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%);
+      color: white;
+      box-shadow: 0 10px 30px rgba(47, 128, 237, 0.4);
+    }
+
+    .btn-success:hover {
+      box-shadow: 0 14px 40px rgba(47, 128, 237, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .btn-success:active {
+      transform: translateY(0);
+    }
+
+    /* Загрузчик */
+    .loader {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Скроллбар */
+    .suggestions::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .suggestions::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .suggestions::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+    }
+
+    .suggestions::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+
+    /* Floating animation для карты */
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .map-icon {
+      animation: float 3s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Область карты -->
+    <div class="map-area">
+      <div class="map-placeholder">
+        <div class="map-icon">
+          <div style="font-size: 64px; margin-bottom: 12px; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.2));">🗺️</div>
+          <div style="font-weight: 600; font-size: 20px; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">Карта 2GIS</div>
+        </div>
+        <!-- Маркеры -->
+        <div class="marker blue"></div>
+        <div class="marker black"></div>
+      </div>
+
+      <!-- Кнопка центрирования -->
+      <button class="center-btn" onclick="centerMap()" title="Центрировать">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="3"/>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="2" x2="12" y2="6"/>
+          <line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/>
+          <line x1="18" y1="12" x2="22" y2="12"/>
+        </svg>
+      </button>
+
+      <!-- Зум контролы -->
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn()">+</button>
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+      </div>
+    </div>
+
+    <!-- Нижняя панель -->
+    <div class="input-panel">
+      <!-- Информация о маршруте -->
+      <div class="route-info" id="routeInfo" style="display: none;">
+        <div class="route-details">
+          <div class="route-detail">
+            <div class="route-label">Расстояние</div>
+            <div class="route-value">12.3 км</div>
+          </div>
+          <div class="route-detail">
+            <div class="route-label">Время</div>
+            <div class="route-value">18 мин</div>
+          </div>
+        </div>
+        <div class="route-cost">
+          Стоимость поездки
+          <span>950 сом</span>
+        </div>
+      </div>
+
+      <!-- Подсказки -->
+      <div class="suggestions" id="suggestions" style="display: none;">
+        <div class="suggestion-item" onclick="selectSuggestion('проспект Чынгыза Айтматова')">
+          <div class="suggestion-title">проспект Чынгыза Айтматова</div>
+          <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+        </div>
+        <div class="suggestion-item" onclick="selectSuggestion('проспект Манаса')">
+          <div class="suggestion-title">проспект Манаса</div>
+          <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+        </div>
+        <div class="suggestion-item" onclick="selectSuggestion('улица Мира')">
+          <div class="suggestion-title">улица Мира</div>
+          <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+        </div>
+        <div class="suggestion-item" onclick="selectSuggestion('Московская улица')">
+          <div class="suggestion-title">Московская улица</div>
+          <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+        </div>
+      </div>
+
+      <!-- Инпут Откуда -->
+      <div class="input-group">
+        <div class="input-wrapper">
+          <input 
+            type="text" 
+            class="input-field" 
+            id="inputA"
+            placeholder="📍 Откуда"
+            onfocus="showSuggestions()"
+            oninput="handleInput()"
+          />
+          <button class="clear-btn" onclick="clearInput('A')">×</button>
+        </div>
+      </div>
+
+      <!-- Инпут Куда -->
+      <div class="input-group">
+        <div class="input-wrapper">
+          <input 
+            type="text" 
+            class="input-field" 
+            id="inputB"
+            placeholder="🎯 Куда"
+            onfocus="showSuggestions()"
+            oninput="handleInput()"
+          />
+          <button class="clear-btn" onclick="clearInput('B')">×</button>
+        </div>
+      </div>
+
+      <!-- Кнопки действий -->
+      <div class="action-buttons">
+        <button class="btn btn-primary" id="buildBtn" onclick="buildRoute()">
+          <span id="buildText">Построить маршрут</span>
+        </button>
+        <button class="btn btn-success" id="orderBtn" onclick="placeOrder()" style="display: none;">
+          🚗 Заказать
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let routeBuilt = false;
+
+    function showSuggestions() {
+      document.getElementById('suggestions').style.display = 'block';
+    }
+
+    function hideSuggestions() {
+      setTimeout(() => {
+        document.getElementById('suggestions').style.display = 'none';
+      }, 200);
+    }
+
+    function handleInput() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+      
+      if (inputA.length > 1 || inputB.length > 1) {
+        showSuggestions();
+      }
+    }
+
+    function selectSuggestion(text) {
+      const activeInput = document.activeElement;
+      if (activeInput && activeInput.classList.contains('input-field')) {
+        activeInput.value = text;
+      }
+      hideSuggestions();
+    }
+
+    function clearInput(field) {
+      document.getElementById('input' + field).value = '';
+      if (field === 'B' && routeBuilt) {
+        document.getElementById('routeInfo').style.display = 'none';
+        document.getElementById('orderBtn').style.display = 'none';
+        document.getElementById('buildBtn').style.display = 'block';
+        routeBuilt = false;
+      }
+    }
+
+    function buildRoute() {
+      const btn = document.getElementById('buildBtn');
+      const text = document.getElementById('buildText');
+      
+      // Показываем загрузку
+      text.innerHTML = '<div class="loader"></div>';
+      btn.style.pointerEvents = 'none';
+      
+      setTimeout(() => {
+        // Показываем результат
+        document.getElementById('routeInfo').style.display = 'block';
+        document.getElementById('orderBtn').style.display = 'block';
+        btn.style.display = 'none';
+        text.textContent = 'Построить маршрут';
+        btn.style.pointerEvents = 'auto';
+        routeBuilt = true;
+      }, 1500);
+    }
+
+    function placeOrder() {
+      alert('🚗 Заказ оформлен!\n\nВодитель уже выехал к вам.');
+    }
+
+    function zoomIn() {
+      console.log('Zoom in');
+    }
+
+    function zoomOut() {
+      console.log('Zoom out');
+    }
+
+    function centerMap() {
+      console.log('Center map');
+    }
+
+    // Закрываем подсказки при клике вне их
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.input-field') && !e.target.closest('.suggestions')) {
+        document.getElementById('suggestions').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

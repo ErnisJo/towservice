@@ -1,18 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, TextInput, ActivityIndicator, Keyboard, NativeModules, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, TextInput, ActivityIndicator, Keyboard, Modal, Animated } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import MapViewProvider from './MapViewProvider';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { on as onEvent } from '../utils/eventBus';
+import { on as onEvent, emit as emitEvent } from '../utils/eventBus';
+import { requestCode as requestAuthCode, verifyAuth as verifyAuthApi, normalizeKgPhone } from '../utils/auth';
 import { useFocusEffect } from '@react-navigation/native';
 
 // Карта показывается только после получения геопозиции пользователя
 export default function HomeScreen({ navigation }) {
   const watchRef = useRef(null);
   const geocodeCacheRef = useRef(new Map());
+  const suggestCacheRef = useRef(new Map()); // Кэш для подсказок - экономия API запросов
+  const geocodeTextCacheRef = useRef(new Map()); // Кэш для прямого геокодинга - экономия API запросов
+  const extraRef = useRef(Constants?.expoConfig?.extra || Constants?.manifest?.extra || {});
+  const extra = extraRef.current;
+  
+  // Анимация для кнопки меню
+  const menuScaleAnim = useRef(new Animated.Value(1)).current;
+  const menuModalScale = useRef(new Animated.Value(0)).current;
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // Общие HTTP-заголовки для вежливых OSM сервисов
   const DEFAULT_HEADERS = {
@@ -26,6 +36,25 @@ export default function HomeScreen({ navigation }) {
     const res = await fetch(url, { ...options, headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+  }, []);
+
+  // Базовая очистка адресных строк
+  const normalizeAddr = useCallback((addr) => {
+    if (!addr) return null;
+    const cleaned = String(addr).trim().replace(/\s+/g, ' ');
+    return cleaned || null;
+  }, []);
+
+  // Проверка на Plus Code (Open Location Code)
+  const isPlusCode = useCallback((str) => {
+    if (!str || typeof str !== 'string') return false;
+    // Plus Code pattern: XXXX+XX или длиннее
+    return /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}$/i.test(str.replace(/\s/g, ''));
+  }, []);
+
+  // Форматирование координат для отображения
+  const formatCoords = useCallback((lat, lon) => {
+    return `Координаты: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
   }, []);
 
   // Грубая проверка, что координаты внутри Кыргызстана (bbox)
@@ -62,12 +91,46 @@ export default function HomeScreen({ navigation }) {
     throw lastErr || new Error('Overpass failed');
   }, [fetchJSON]);
 
-  // Удаляет из адреса упоминания области ("область", "обл.")
-  const cleanRuAddress = useCallback((addr) => {
-    if (!addr || typeof addr !== 'string') return addr;
-    const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
-    const filtered = parts.filter(p => !/\bобл(?:\.|асть)?\b/i.test(p));
-    return filtered.join(', ');
+  const hasHouseNumber = useCallback((addr) => {
+    if (!addr) return false;
+    const text = String(addr);
+    return /\b\d+[а-яa-z]?([\\/\-]\d+[а-яa-z]?)?\b/i.test(text);
+  }, []);
+
+  const extractBaseStreet = useCallback((addr) => {
+    const normalized = normalizeAddr(addr);
+    if (!normalized) return null;
+    const parts = normalized.split(',').map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const first = parts[0];
+    if (/^\d/.test(first) && parts.length > 1) return parts[1];
+    return first;
+  }, [normalizeAddr]);
+
+  // Оценка, что адрес низкого качества (только район/страна и т.п.)
+  const isRegionLevelAddr = useCallback((addr) => {
+    if (!addr || typeof addr !== 'string') return false;
+    const s = addr.toLowerCase();
+    // Если в строке есть слова типа район/область/страна или явно указано Kyrgyz/KG
+    return /\b(район|област|область|республика|страна|киргиз|кыргыз|kyrgyz|kg)\b/.test(s);
+  }, []);
+
+  const distMeters = useCallback((a, b) => {
+    if (!a || !b) return Infinity;
+    const lat1 = Number.isFinite(a.lat) ? a.lat : Number.isFinite(a.latitude) ? a.latitude : null;
+    const lon1 = Number.isFinite(a.lon) ? a.lon : Number.isFinite(a.longitude) ? a.longitude : null;
+    const lat2 = Number.isFinite(b.lat) ? b.lat : Number.isFinite(b.latitude) ? b.latitude : null;
+    const lon2 = Number.isFinite(b.lon) ? b.lon : Number.isFinite(b.longitude) ? b.longitude : null;
+    if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) {
+      return Infinity;
+    }
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const sinLat = Math.sin(dLat / 2);
+    const sinLon = Math.sin(dLon / 2);
+    const h = sinLat * sinLat + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * sinLon * sinLon;
+    return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
   }, []);
 
   const [region, setRegion] = useState(null);
@@ -82,6 +145,8 @@ export default function HomeScreen({ navigation }) {
   const [addrB, setAddrB] = useState(null);
   const [startVisible, setStartVisible] = useState(true);
   const [activeField, setActiveField] = useState(null); // 'A' | 'B' | null
+  const activeFieldRef = useRef(null); // Ref для избежания race condition с blur
+  const prevDestinationRef = useRef(null); // Для отслеживания был ли destination до изменения startPoint
   const [suggestions, setSuggestions] = useState([]); // [{title, subtitle, latitude, longitude, address}]
   const [suggesting, setSuggesting] = useState(false);
   const suggestTimerRef = useRef(null);
@@ -97,6 +162,8 @@ export default function HomeScreen({ navigation }) {
   const norm = useCallback((s) => (s == null ? '' : String(s).replace(/\s+/g, ' ').trim().toLowerCase()), []);
   const [lastBuildAt, setLastBuildAt] = useState(0);
   const [lastUserEditAt, setLastUserEditAt] = useState(0);
+  const [showEditHint, setShowEditHint] = useState(false);
+  const isInitializedRef = useRef(false); // Флаг для предотвращения повторной инициализации
   // Встроенная авторизация перед заказом
   const [authOpen, setAuthOpen] = useState(false);
   const [authStep, setAuthStep] = useState(1); // 1: телефон, 2: код (+ имя при регистрации)
@@ -106,7 +173,88 @@ export default function HomeScreen({ navigation }) {
   const [authName, setAuthName] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authDevHint, setAuthDevHint] = useState('');
-  const normPhone = useCallback((s) => (s ? String(s).replace(/\D+/g, '') : ''), []);
+  const [user, setUser] = useState(null);
+
+  const authRequestCode = useCallback(async () => {
+    const trimmed = (authPhone || '').trim();
+    const normalized = normalizeKgPhone(trimmed);
+    if (!normalized.e164) {
+      Alert.alert('Ошибка', 'Введите корректный номер телефона');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const response = await requestAuthCode(trimmed);
+      const phoneDisplay = response?.phoneDisplay || response?.phone || normalized.display;
+      setAuthPhone(phoneDisplay);
+      setAuthMode(response?.userExists === false ? 'register' : 'login');
+      if (response?.devCode) {
+        const hint = `Код (dev): ${response.devCode}`;
+        setAuthDevHint(hint);
+        try { Alert.alert('Код отправлен', `Ваш код: ${response.devCode}`); } catch {}
+      } else {
+        setAuthDevHint('');
+        try { Alert.alert('Код отправлен', 'Введите код из SMS'); } catch {}
+      }
+      setAuthStep(2);
+      setAuthCode('');
+    } catch (err) {
+      console.error('[AUTH] Request code failed:', err);
+      const msg = err?.message === 'invalid_phone_number' ? 'Введите корректный номер телефона' : 'Не удалось отправить код';
+      Alert.alert('Ошибка', msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [authPhone, requestAuthCode, normalizeKgPhone]);
+
+  const authVerify = useCallback(async () => {
+    const trimmedCode = (authCode || '').trim();
+    const normalized = normalizeKgPhone(authPhone);
+    if (!normalized.e164) {
+      Alert.alert('Ошибка', 'Введите корректный номер телефона');
+      return;
+    }
+    if (!trimmedCode) {
+      Alert.alert('Ошибка', 'Введите код из SMS');
+      return;
+    }
+    const cleanName = (authName || '').trim();
+    if (authMode === 'register' && !cleanName) {
+      Alert.alert('Ошибка', 'Введите имя');
+      return;
+    }
+    const currentMode = authMode;
+    setAuthLoading(true);
+    try {
+      const payload = { phone: normalized.e164, code: trimmedCode };
+      if (currentMode === 'register' && cleanName) {
+        payload.name = cleanName;
+      }
+      const result = await verifyAuthApi(payload);
+      if (result?.token) {
+        await AsyncStorage.setItem('tow_token', result.token);
+      }
+      if (result?.user) {
+        await AsyncStorage.setItem('tow_user', JSON.stringify(result.user));
+      }
+      try { emitEvent('auth:changed', { user: result?.user || null, token: result?.token || null, action: 'login' }); } catch {}
+      setAuthOpen(false);
+      setAuthStep(1);
+      setAuthMode('login');
+      setAuthCode('');
+      setAuthName('');
+      setAuthDevHint('');
+      setAuthPhone(result?.phoneDisplay || result?.phone || normalized.display);
+      const successMsg = currentMode === 'register' ? 'Аккаунт создан, вы вошли' : 'Вы вошли в аккаунт';
+      Alert.alert('Готово', successMsg);
+    } catch (err) {
+      console.error('[AUTH] Verify failed:', err);
+      const msg = err?.message === 'invalid_phone_number' ? 'Введите корректный номер телефона' : (err?.message || 'Не удалось подтвердить код');
+      Alert.alert('Ошибка', msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [authPhone, authCode, authName, authMode, verifyAuthApi, normalizeKgPhone]);
 
   const [permissionStatus, setPermissionStatus] = useState('checking'); // 'checking' | 'granted' | 'prompt'
   const [canAskAgain, setCanAskAgain] = useState(true);
@@ -115,380 +263,165 @@ export default function HomeScreen({ navigation }) {
 
   // Resolve API base for device (replace localhost with Metro host IP)
   const getApiBase = useCallback(() => {
-    const cfg = Constants?.expoConfig?.extra?.apiBase || 'http://localhost:4001';
-    if (/localhost|127\.0\.0\.1/.test(cfg) && Platform.OS !== 'web') {
-      try {
-        const scriptURL = NativeModules?.SourceCode?.scriptURL || '';
-        const m = scriptURL && scriptURL.match(/^(https?:)\/\/(.*?):\d+/);
-        if (m) return `${m[1]}//${m[2]}:4001`;
-      } catch (_) {}
+    const configured = extra?.apiBase;
+    if (typeof configured === 'string' && configured.length) {
+      if (/localhost|127\.0\.0\.1/.test(configured)) {
+        const hostUri = Constants?.expoConfig?.hostUri;
+        const host = hostUri ? hostUri.split(':')[0] : null;
+        if (host) {
+          return configured.replace(/https?:\/\/(localhost|127\.0\.0\.1)/, `http://${host}`);
+        }
+      }
+      return configured;
     }
-    return cfg;
+    const hostUri = Constants?.expoConfig?.hostUri;
+    const host = hostUri ? hostUri.split(':')[0] : null;
+    return host ? `http://${host}:4001` : 'http://192.168.0.101:4001';
   }, []);
 
-  // Load tariff on screen focus
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      const run = async () => {
-        try {
-          const base = getApiBase();
-          const res = await fetch(base + '/tariff?t=' + Date.now(), { cache: 'no-store' });
-          if (res.ok) {
-            const j = await res.json();
-            if (!cancelled && j && typeof j === 'object') {
-              const next = {
-                base: Number(j.base) || 600,
-                perKm: Number(j.perKm) || 40,
-                per3min: Number(j.per3min) || 10,
-              };
-        setTariff(next);
-            }
-          }
-        } catch (_) {}
-      };
-      run();
-      // Poll for tariff updates while focused
-      const timer = setInterval(run, 10000);
-      return () => { cancelled = true; clearInterval(timer); };
-    }, [getApiBase])
-  );
+  const reverseAddressBest = useCallback(async (lat, lon) => {
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`; // Округление до ~11м для лучшего кэширования
+    const cached = geocodeCacheRef.current.get(key);
+    if (cached) return cached;
 
-  // Запросить код (dev: сервер возвращает devCode)
-  const authRequestCode = useCallback(async () => {
-  const p = normPhone(authPhone.trim());
-    if (!p) { Alert.alert('Ошибка', 'Введите номер телефона'); return; }
-    setAuthLoading(true);
-    setAuthDevHint('');
+    // 2GIS backend reverse geocoding
     try {
-  const base = getApiBase();
-      // helper: fetch with timeout
-      const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
-        const controller = new AbortController();
-        const id = setTimeout(() => { try { controller.abort(); } catch {} }, timeoutMs);
-        try { return await fetch(url, { ...(options||{}), signal: controller.signal }); }
-        finally { clearTimeout(id); }
-      };
-      let res = await fetchWithTimeout(base + '/auth/request-code', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: p })
-      });
-  // no fallback to :4000 — используем только Python API на 4001
-      if (!res.ok) throw new Error('bad');
-      const j = await res.json();
-      if (j?.devCode) setAuthDevHint(`Код (dev): ${j.devCode}`);
-      // Определяем режим ТОЛЬКО по клиентской проверке /users (без опоры на серверный userExists)
-      let exists = false; // по умолчанию считаем, что нет (чтобы новый номер переключал на регистрацию)
-      try {
-        const uRes = await fetchWithTimeout(base + '/users?t=' + Date.now(), { method: 'GET', headers: { 'Accept': 'application/json' }, cache: 'no-store' }, 8000);
-        if (uRes.ok) {
-          const arr = await uRes.json();
-          if (Array.isArray(arr)) {
-            exists = arr.some(u => normPhone(u?.phone) === p);
-          }
-        }
-      } catch {}
-      setAuthMode(exists ? 'login' : 'register');
-  setAuthStep(2);
-    } catch (_) {
-      Alert.alert('Ошибка', 'Не удалось отправить код');
-    } finally { setAuthLoading(false); }
-  }, [authPhone, getApiBase]);
+      const url = `${getApiBase()}/geocode/reverse?lat=${lat}&lon=${lon}`;
+      const j = await fetchJSON(url);
+      const address = j?.address || null;
+      if (address && !isPlusCode(address)) {
+        const res = normalizeAddr(address);
+        geocodeCacheRef.current.set(key, res);
+        return res;
+      }
+    } catch (_) {}
 
-  // Проверить код; если пользователь новый — используем имя для регистрации
-  const authVerify = useCallback(async () => {
-  const p = normPhone(authPhone.trim());
-    const c = authCode.trim();
-    if (!p || !c) { Alert.alert('Ошибка', 'Введите номер и код'); return; }
-    setAuthLoading(true);
+    // Последний шанс — встроенный геокодер устройства
     try {
-      const base = getApiBase();
-      // reuse fetchWithTimeout from outer scope by redefining (function scope)
-      const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
-        const controller = new AbortController();
-        const id = setTimeout(() => { try { controller.abort(); } catch {} }, timeoutMs);
-        try { return await fetch(url, { ...(options||{}), signal: controller.signal }); }
-        finally { clearTimeout(id); }
-      };
-  let res = await fetchWithTimeout(base + '/auth/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: p, code: c, ...(authName ? { name: authName.trim() } : {}) })
-      });
-  // no fallback to :4000 — используем только Python API на 4001
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'bad');
-      if (j?.token) await AsyncStorage.setItem('tow_token', j.token);
-      if (j?.user) await AsyncStorage.setItem('tow_user', JSON.stringify(j.user));
-      // Успех: закрываем оверлей и продолжаем заказ
-      setAuthOpen(false);
-      setAuthStep(1);
-  setAuthPhone(''); setAuthCode(''); setAuthName(''); setAuthDevHint(''); setAuthMode('login');
-      await placeOrder();
-    } catch (_) {
-      Alert.alert('Ошибка', 'Неверный код');
-    } finally { setAuthLoading(false); }
-  }, [authPhone, authCode, authName, getApiBase, placeOrder]);
-
-  // Быстрая метрика расстояния (м) для выбора ближайших объектов
-  const distMeters = useCallback((a, b) => {
-    const toRad = Math.PI / 180;
-    const R = 6371000;
-    const dLat = (b.lat - a.lat) * toRad;
-    const dLon = (b.lon - a.lon) * toRad;
-    const s1 = Math.sin(dLat / 2);
-    const s2 = Math.sin(dLon / 2);
-    const aa = s1 * s1 + Math.cos(a.lat * toRad) * Math.cos(b.lat * toRad) * s2 * s2;
-    return 2 * R * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
-  }, []);
-
-  // Нормализация адресов определена ниже (одна активная версия)
-
-  const hasHouseNumber = useCallback((addr) => {
-    if (!addr) return false;
-    const tail = addr.split(',').slice(1).join(',');
-    return /,\s*\d/.test(addr) || /дом\s*\d/i.test(addr) || /\b\d+\s*(?:[A-Za-zА-Яа-я]|к\.?|корп\.?|с\.?|стр\.)?\s*\d*\b/.test(tail);
-  }, []);
-
-  // Вспомогательное: вытащить базовую «улицу» из адресной строки (для уточнения номера дома)
-  const extractBaseStreet = useCallback((addr) => {
-    if (!addr || typeof addr !== 'string') return null;
-    const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
-    if (!parts.length) return null;
-    if (parts.length >= 2 && /(район|округ|АО|административный округ)/i.test(parts[0])) {
-      return parts[1];
-    }
-    return parts[0];
-  }, []);
-
-  const normalizeAddr = useCallback((addr) => {
-    if (!addr) return null;
-    // Минимальная нормализация: ничего не трогаем, только trim
-    return typeof addr === 'string' ? addr.trim() : String(addr);
-  }, []);
-
-  // Поиск подсказок (организации/адреса) по вводу пользователя — только Кыргызстан
-  const suggestPlaces = useCallback(async (query) => {
-    const result = [];
-    if (!query || typeof query !== 'string') return result;
-    const raw = query.trim();
-    if (raw.length < 2) return result;
-    const narrowed = /киргиз|кыргыз|kyrgyz|kg/i.test(raw) ? raw : `Кыргызстан, ${raw}`;
-    const q = encodeURIComponent(narrowed);
-    const dgisKey = Constants?.expoConfig?.extra?.dgisApiKey;
-    const liqKey = Constants?.expoConfig?.extra?.locationIqKey;
-
-    // 1) 2GIS Items: лучшие подсказки по организациям/местам
-    if (dgisKey) {
-      try {
-        const url = `https://catalog.api.2gis.com/3.0/items?q=${q}&fields=items.point,items.geometry.centroid,items.address_name,items.full_name,items.name&key=${dgisKey}&page_size=6`;
-        const j = await fetchJSON(url);
-        const items = j?.result?.items || [];
-        items.forEach(it => {
-          const p = it?.point || it?.geometry?.centroid || {};
-          const lat = p?.lat ?? p?.latitude; const lon = p?.lon ?? p?.longitude;
-          if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-            const title = it?.name || it?.full_name || it?.address_name || raw;
-            const subtitle = it?.address_name || it?.full_name || '';
-            result.push({ title: normalizeAddr(title), subtitle: normalizeAddr(subtitle), latitude: lat, longitude: lon, address: normalizeAddr(subtitle || title) });
-          }
-        });
-      } catch (_) { /* ignore and fallback */ }
-    }
-
-    // 2) Fallback: LocationIQ поиск
-    if (result.length < 3 && liqKey) {
-      try {
-        const url = `https://us1.locationiq.com/v1/search?format=json&q=${q}&addressdetails=1&accept-language=ru&countrycodes=kg&limit=6&key=${liqKey}`;
-        const arr = await fetchJSON(url);
-        if (Array.isArray(arr)) {
-          arr.forEach(r => {
-            const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
-            if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-              const display = r.display_name || raw;
-              const a = r?.address || {};
-              const street = a.road || a.pedestrian || a.residential || a.footway || a.path || a.cycleway || a.highway;
-              const house = a.house_number || a.building || a.house;
-              const base = street ? (house ? `${street}, ${house}` : street) : display;
-              result.push({ title: normalizeAddr(base), subtitle: normalizeAddr(display), latitude: lat, longitude: lon, address: normalizeAddr(base) });
-            }
-          });
+      const arr = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+      if (Array.isArray(arr) && arr.length) {
+        const it = arr[0] || {};
+        const street = it.street || it.name || null;
+        const house = it.streetNumber || it.name || null;
+        if (street && house && !isPlusCode(`${street}, ${house}`)) {
+          const res = normalizeAddr(`${street}, ${house}`);
+          geocodeCacheRef.current.set(key, res);
+          return res;
         }
-      } catch (_) {}
-    }
-
-    // 3) Fallback: Nominatim
-    if (result.length < 3) {
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${q}&addressdetails=1&accept-language=ru&countrycodes=kg&limit=6`;
-        const arr = await fetchJSON(url);
-        if (Array.isArray(arr)) {
-          arr.forEach(r => {
-            const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
-            if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-              const display = r.display_name || raw;
-              const a = r?.address || {};
-              const street = a.road || a.pedestrian || a.residential || a.footway || a.path || a.cycleway || a.highway;
-              const house = a.house_number || a.building || a.house;
-              const base = street ? (house ? `${street}, ${house}` : street) : display;
-              result.push({ title: normalizeAddr(base), subtitle: normalizeAddr(display), latitude: lat, longitude: lon, address: normalizeAddr(base) });
-            }
-          });
+        if (street && !isPlusCode(street)) {
+          const res = normalizeAddr(street);
+          geocodeCacheRef.current.set(key, res);
+          return res;
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
-    // Уникализируем по координатам/названию и ограничим до 8
-    const seen = new Set();
-    const final = [];
-    for (const it of result) {
-      const key = `${it.title}|${it.latitude?.toFixed?.(5)},${it.longitude?.toFixed?.(5)}`;
-      if (!seen.has(key)) { seen.add(key); final.push(it); }
-      if (final.length >= 8) break;
-    }
-    return final;
-  }, [fetchJSON, isInKG, normalizeAddr]);
-
+    // Если ничего не найдено или только Plus Codes, возвращаем координаты
+    const coordsStr = formatCoords(lat, lon);
+    geocodeCacheRef.current.set(key, coordsStr);
+    return coordsStr;
+  }, [fetchJSON, normalizeAddr, isPlusCode, formatCoords]);
   // Прямое геокодирование текстового адреса -> координаты и строка адреса
   const geocodeTextBest = useCallback(async (query) => {
     if (!query || typeof query !== 'string') return null;
     const raw = query.trim();
+    
+    // Проверка кэша - экономия API запросов
+    const cacheKey = raw.toLowerCase();
+    const cached = geocodeTextCacheRef.current.get(cacheKey);
+    if (cached) {
+      console.log('[GEOCODE] Using cached results for:', raw);
+      return cached;
+    }
+    
     const narrowedQ = /киргиз|кыргыз|kyrgyz|kg/i.test(raw) ? raw : `Кыргызстан, ${raw}`;
     const q = encodeURIComponent(narrowedQ);
-    const yaKey = Constants?.expoConfig?.extra?.yandex?.apiKey;
-    const gKey = Constants?.expoConfig?.extra?.googleMapsApiKey;
-    const dgisKey = Constants?.expoConfig?.extra?.dgisApiKey;
-    const liqKey = Constants?.expoConfig?.extra?.locationIqKey;
+  const maptilerKey = extra?.maptilerApiKey;
 
-    // 0a) 2GIS items search — отлично ищет организации по названию
-    if (dgisKey) {
+    if (maptilerKey) {
       try {
-        const url = `https://catalog.api.2gis.com/3.0/items?q=${q}&fields=items.point,items.geometry.centroid,items.address_name,items.full_name&key=${dgisKey}`;
+        // MapTiler Geocoding API - forward geocoding с bbox для Кыргызстана
+        const bbox = '69.2,39.1,80.3,43.3'; // Кыргызстан bbox
+        const url = `https://api.maptiler.com/geocoding/${q}.json?key=${maptilerKey}&language=ru&bbox=${bbox}&limit=5`;
         const j = await fetchJSON(url);
-        const items = j?.result?.items || [];
-        if (items.length) {
-          // Берём первый попавшийся в пределах Кыргызстана
-          for (const it of items) {
-            const p = it?.point || it?.geometry?.centroid || {};
-            const lat = p?.lat ?? p?.latitude; const lon = p?.lon ?? p?.longitude;
-            if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-              const addr = normalizeAddr(it?.address_name || it?.full_name || raw);
-              return { latitude: lat, longitude: lon, address: addr };
+        const features = j?.features || [];
+        if (features.length) {
+          for (const feat of features) {
+            const coords = feat?.geometry?.coordinates || feat?.center;
+            if (Array.isArray(coords) && coords.length >= 2) {
+              const lon = coords[0];
+              const lat = coords[1];
+              if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
+                const addr = normalizeAddr(feat?.place_name || feat?.text || raw);
+                const result = { latitude: lat, longitude: lon, address: addr };
+                
+                // Сохранение в кэш с LRU - максимум 50 записей
+                if (geocodeTextCacheRef.current.size > 50) {
+                  const firstKey = geocodeTextCacheRef.current.keys().next().value;
+                  geocodeTextCacheRef.current.delete(firstKey);
+                }
+                geocodeTextCacheRef.current.set(cacheKey, result);
+                
+                return result;
+              }
             }
           }
         }
       } catch(_) {}
     }
 
-    // 0) Yandex Geocoder
-    if (yaKey) {
-      try {
-        // Яндекс не имеет явного фильтра по стране, поэтому сужаем сам запрос префиксом "Кыргызстан"
-        const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${yaKey}&format=json&geocode=${q}&lang=ru_RU&results=5`;
-        const j = await fetchJSON(url);
-        const fm = j?.response?.GeoObjectCollection?.featureMember;
-        if (Array.isArray(fm) && fm.length) {
-          const geo = fm[0]?.GeoObject;
-          const md = geo?.metaDataProperty?.GeocoderMetaData;
-          const comps = md?.Address?.Components || [];
-          const street = (comps.find(c => c.kind === 'street' || c.kind === 'thoroughfare') || {})?.name;
-          const house = (comps.find(c => c.kind === 'house') || {})?.name;
-          const formatted = md?.Address?.formatted || md?.text || null;
-          const posStr = geo?.Point?.pos || '';
-          const [lonStr, latStr] = posStr.split(' ');
-          const lat = parseFloat(latStr); const lon = parseFloat(lonStr);
-          if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-            const addrTxt = normalizeAddr(street ? (house ? `${street}, ${house}` : street) : (formatted || query));
-            return { latitude: lat, longitude: lon, address: addrTxt };
-          }
-        }
-      } catch(_) {}
-    }
-
-    // 1) 2GIS forward
-    if (dgisKey) {
-      try {
-        // Сужаем поисковую фразу префиксом страны
-        const url = `https://catalog.api.2gis.com/3.0/items/geocode?q=${q}&key=${dgisKey}`;
-        const j = await fetchJSON(url);
-        const items = j?.result?.items || [];
-        if (items.length) {
-          const it = items[0];
-          const p = it?.point || it?.geometry?.centroid || {};
-          const lat = p?.lat ?? p?.latitude; const lon = p?.lon ?? p?.longitude;
-          if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-            const addr = normalizeAddr(it?.address_name || it?.full_name || query);
-            return { latitude: lat, longitude: lon, address: addr };
-          }
-        }
-      } catch(_) {}
-    }
-
-    // 2) Google Geocoding
-    if (gKey) {
-      try {
-        // Жёсткая фильтрация по стране через components=country:KG
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&language=ru&components=country:KG&key=${gKey}`;
-        const j = await fetchJSON(url);
-        if (j && Array.isArray(j.results) && j.results.length) {
-          const r = j.results[0];
-          const loc = r?.geometry?.location;
-          if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number' && isInKG(loc.lat, loc.lng)) {
-            const comps = r.address_components || [];
-            const route = (comps.find(c => c.types?.includes('route')) || {}).long_name;
-            const num = (comps.find(c => c.types?.includes('street_number')) || {}).long_name;
-            const txt = route ? (num ? `${route}, ${num}` : route) : (r.formatted_address || query);
-            return { latitude: loc.lat, longitude: loc.lng, address: normalizeAddr(txt) };
-          }
-        }
-      } catch(_) {}
-    }
-
-    // 3) LocationIQ search
-    if (liqKey) {
-      try {
-        // Ограничиваем страны через countrycodes=kg
-        const url = `https://us1.locationiq.com/v1/search?format=json&q=${q}&addressdetails=1&accept-language=ru&countrycodes=kg&key=${liqKey}`;
-        const arr = await fetchJSON(url);
-        if (Array.isArray(arr) && arr.length) {
-          const r = arr[0];
-          const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
-          if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-            const a = r?.address || {};
-            const street = a.road || a.pedestrian || a.residential || a.footway || a.path || a.cycleway || a.highway;
-            const house = a.house_number || a.building || a.house;
-            const txt = street ? (house ? `${street}, ${house}` : street) : (r.display_name || query);
-            return { latitude: lat, longitude: lon, address: normalizeAddr(txt) };
-          }
-        }
-      } catch(_) {}
-    }
-
-    // 4) Nominatim search (OSM)
-    try {
-      // Ограничиваем страны через countrycodes=kg
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${q}&addressdetails=1&accept-language=ru&countrycodes=kg&limit=5`;
-      const arr = await fetchJSON(url);
-      if (Array.isArray(arr) && arr.length) {
-        const r = arr[0];
-        const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
-        if (Number.isFinite(lat) && Number.isFinite(lon) && isInKG(lat, lon)) {
-          const a = r?.address || {};
-          const street = a.road || a.pedestrian || a.residential || a.footway || a.path || a.cycleway || a.highway;
-          const house = a.house_number || a.building || a.house;
-          const txt = street ? (house ? `${street}, ${house}` : street) : (r.display_name || query);
-          return { latitude: lat, longitude: lon, address: normalizeAddr(txt) };
-        }
-      }
-    } catch(_) {}
-
     return null;
   }, [fetchJSON, normalizeAddr, isInKG]);
+
+  const suggestPlaces = useCallback(async (input) => {
+    const raw = (input || '').trim();
+    if (!raw) return [];
+    
+    // Проверяем кэш для экономии API запросов
+    const cacheKey = raw.toLowerCase();
+    const cached = suggestCacheRef.current.get(cacheKey);
+    if (cached) {
+      console.log('[SUGGEST] Using cached results for:', raw);
+      return cached;
+    }
+    
+    // Используем backend 2GIS suggest для качественных подсказок полных адресов
+    try {
+      const url = `${getApiBase()}/geocode/suggest?query=${encodeURIComponent(raw)}&limit=8`;
+      const j = await fetchJSON(url);
+      const results = j?.results || [];
+      
+      const mapped = results.map(item => ({
+        title: item.title || raw,
+        subtitle: item.subtitle || null,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        address: item.address || item.title || raw,
+      }));
+      
+      // Сохраняем в кэш (максимум 50 записей)
+      if (suggestCacheRef.current.size > 50) {
+        const firstKey = suggestCacheRef.current.keys().next().value;
+        suggestCacheRef.current.delete(firstKey);
+      }
+      suggestCacheRef.current.set(cacheKey, mapped);
+      
+      return mapped;
+    } catch (err) {
+      console.warn('[SUGGEST] Error:', err);
+      return [];
+    }
+  }, [fetchJSON, getApiBase]);
 
   // Дебаунс подсказок при вводе в A/B
   useEffect(() => {
     const q = activeField === 'A' ? addrA : activeField === 'B' ? addrB : null;
     if (!activeField) return;
     if (suggestTimerRef.current) { clearTimeout(suggestTimerRef.current); suggestTimerRef.current = null; }
-    if (!q || q.trim().length < 2) { setSuggestions([]); setSuggesting(false); return; }
+    // Увеличили минимум до 3 символов для экономии API запросов
+    if (!q || q.trim().length < 3) { setSuggestions([]); setSuggesting(false); return; }
     setSuggesting(true);
+    // Увеличили задержку до 500мс для экономии API запросов
     suggestTimerRef.current = setTimeout(async () => {
       try {
         const list = await suggestPlaces(q);
@@ -498,7 +431,7 @@ export default function HomeScreen({ navigation }) {
       } finally {
         setSuggesting(false);
       }
-    }, 300);
+    }, 500);
     return () => {
       if (suggestTimerRef.current) { clearTimeout(suggestTimerRef.current); suggestTimerRef.current = null; }
     };
@@ -548,188 +481,6 @@ export default function HomeScreen({ navigation }) {
     return null;
   }, [distMeters, normalizeAddr, overpassQuery]);
 
-  // Улучшенное обратное геокодирование: OSRM nearest -> Nominatim -> Overpass (fallback для номера дома)
-  const reverseAddressBest = useCallback(async (lat, lon) => {
-    const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-    const cached = geocodeCacheRef.current.get(key);
-    if (cached) return cached;
-  const yaKey = Constants?.expoConfig?.extra?.yandex?.apiKey;
-  const gKey = Constants?.expoConfig?.extra?.googleMapsApiKey;
-  const dgisKey = Constants?.expoConfig?.extra?.dgisApiKey;
-  const liqKey = Constants?.expoConfig?.extra?.locationIqKey;
-
-    // 0) Yandex Geocoder (если есть ключ) — максимально близко к данным карты
-  if (yaKey) {
-      try {
-        const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${yaKey}&format=json&geocode=${lon},${lat}&lang=ru_RU&kind=house&results=1`;
-  const j = await fetchJSON(url);
-        const fm = j?.response?.GeoObjectCollection?.featureMember;
-        if (Array.isArray(fm) && fm.length) {
-          const geo = fm[0]?.GeoObject;
-          const md = geo?.metaDataProperty?.GeocoderMetaData;
-          const comps = md?.Address?.Components || [];
-          const districtComp = comps.find(c => c.kind === 'district' || c.kind === 'area' || c.kind === 'province');
-          const district = districtComp && districtComp.name ? districtComp.name : null;
-          const street = (comps.find(c => c.kind === 'street' || c.kind === 'thoroughfare') || {}).name;
-      const houseComp = (comps.find(c => c.kind === 'house') || {});
-      const house = houseComp.name || houseComp.number || null;
-          const formatted = md?.Address?.formatted || md?.text || null;
-          let txt = null;
-          if (street && house) txt = `${district ? district + ', ' : ''}${street}, ${house}`;
-          else if (street) txt = `${district ? district + ', ' : ''}${street}`;
-          else if (formatted) txt = formatted;
-          if (txt) {
-            const res = normalizeAddr(txt);
-            geocodeCacheRef.current.set(key, res);
-            return res;
-          }
-        }
-      } catch (_) { /* fallthrough */ }
-    }
-
-    // 1) 2GIS координатный геокодер (бесплатно, хороший охват RU/KG)
-  if (dgisKey) {
-      try {
-        const url = `https://catalog.api.2gis.com/3.0/items/geocode?lat=${lat}&lon=${lon}&type=house&key=${dgisKey}`;
-  const j = await fetchJSON(url);
-        const items = j?.result?.items || [];
-        if (items.length) {
-          // Берём первый адресный объект; собираем улицу и номер
-          const it = items[0];
-      const address = it?.address_name || it?.full_name || null;
-    if (address) { const res = normalizeAddr(address); geocodeCacheRef.current.set(key, res); return res; }
-        }
-      } catch (_) { /* fallthrough */ }
-    }
-    // 2) Google (если доступен) — даёт стабильные номера домов
-  if (gKey) {
-      try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&language=ru&key=${gKey}`;
-  const j = await fetchJSON(url);
-        if (j && Array.isArray(j.results) && j.results.length) {
-          // Ищем типы street_address / premise / subpremise, затем route+street_number
-          const pick = j.results.find(it => it.types && (it.types.includes('street_address') || it.types.includes('premise'))) || j.results[0];
-          const comps = (pick && pick.address_components) || [];
-          const route = (comps.find(c => c.types.includes('route')) || {}).long_name;
-          const num = (comps.find(c => c.types.includes('street_number')) || {}).long_name;
-      const txt = route ? (num ? `${route}, ${num}` : route) : (pick.formatted_address || null);
-    if (txt) { const res = normalizeAddr(txt); geocodeCacheRef.current.set(key, res); return res; }
-        }
-      } catch (_) { /* fallthrough to OSM path */ }
-    }
-
-  // 3) LocationIQ (бесплатный тариф с ключом)
-  if (liqKey) {
-      try {
-        const url = `https://us1.locationiq.com/v1/reverse?format=json&lat=${lat}&lon=${lon}&normalizecity=1&addressdetails=1&accept-language=ru&key=${liqKey}`;
-        const j = await fetchJSON(url);
-        const a = j?.address || {};
-        const street = a.road || a.pedestrian || a.residential || a.footway || a.path || a.cycleway || a.highway;
-        const house = a.house_number || a.building || a.house;
-  if (street && house) { const res = normalizeAddr(`${street}, ${house}`); geocodeCacheRef.current.set(key, res); return res; }
-  if (street) { const res = normalizeAddr(street); geocodeCacheRef.current.set(key, res); return res; }
-    const dn = j?.display_name || null;
-  if (dn) { const res = normalizeAddr(dn); geocodeCacheRef.current.set(key, res); return res; }
-      } catch (_) { /* continue */ }
-    }
-    let sLat = lat, sLon = lon;
-    // Снап к ближайшей дороге, чтобы Nominatim чаще давал улицу/дом
-    try {
-  const nj = await fetchJSON(`https://router.project-osrm.org/nearest/v1/driving/${lon},${lat}`);
-      const wp = nj && nj.waypoints && nj.waypoints[0] && nj.waypoints[0].location;
-      if (Array.isArray(wp)) { sLon = wp[0]; sLat = wp[1]; }
-    } catch (_) {}
-
-    let street = null, house = null, fallbackText = null, districtOSM = null;
-    try {
-  const j = await fetchJSON(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${sLat}&lon=${sLon}&accept-language=ru&addressdetails=1&zoom=18`);
-      const a = j?.address || {};
-      street = a.road || a.pedestrian || a.footway || a.path || a.cycleway || a.residential || a.highway || null;
-      house = a.house_number || a.building || a.house || null;
-      districtOSM = a.suburb || a.neighbourhood || a.city_district || a.district || null;
-      fallbackText = j?.name || j?.display_name || null;
-    } catch (_) {}
-
-  if (street && house) { const res = normalizeAddr(`${districtOSM ? districtOSM + ', ' : ''}${street}, ${house}`); geocodeCacheRef.current.set(key, res); return res; }
-
-    // Найти ближайший дом с номером через Overpass, если улица есть, а дома нет
-    if (street && !house) {
-      try {
-        const q = `
-          [out:json][timeout:8];
-          (
-            way(around:220,${lat},${lon})["addr:housenumber"]; 
-            node(around:220,${lat},${lon})["addr:housenumber"]; 
-          );
-          out body center;
-        `;
-        const oj = await overpassQuery(q);
-        if (oj && Array.isArray(oj.elements) && oj.elements.length) {
-          let best = null, bestD = Infinity;
-          oj.elements.forEach(el => {
-            const elLat = el.lat || (el.center && el.center.lat);
-            const elLon = el.lon || (el.center && el.center.lon);
-            if (elLat != null && elLon != null) {
-              const d = distMeters({ lat, lon }, { lat: elLat, lon: elLon });
-              if (d < bestD) { bestD = d; best = el; }
-            }
-          });
-          if (best && best.tags) {
-            const h = best.tags["addr:housenumber"];
-            const st = best.tags["addr:street"] || street;
-            if (st && h) { const res = normalizeAddr(`${st}, ${h}`); geocodeCacheRef.current.set(key, res); return res; }
-          }
-        }
-      } catch (_) {}
-    }
-
-    // Если улицы нет — попробуем найти объект с addr:street + addr:housenumber поблизости
-    if (!street) {
-      try {
-        const q2 = `
-          [out:json][timeout:8];
-          (
-            way(around:200,${lat},${lon})["addr:street"]["addr:housenumber"]; 
-            node(around:200,${lat},${lon})["addr:street"]["addr:housenumber"]; 
-          );
-          out body center;
-        `;
-        const oj2 = await overpassQuery(q2);
-        if (oj2 && Array.isArray(oj2.elements) && oj2.elements.length) {
-          let best = null, bestD = Infinity;
-          oj2.elements.forEach(el => {
-            const elLat = el.lat || (el.center && el.center.lat);
-            const elLon = el.lon || (el.center && el.center.lon);
-            if (elLat != null && elLon != null) {
-              const d = distMeters({ lat, lon }, { lat: elLat, lon: elLon });
-              if (d < bestD) { bestD = d; best = el; }
-            }
-          });
-          if (best && best.tags) {
-            const st = best.tags["addr:street"]; const h = best.tags["addr:housenumber"]; 
-            if (st && h) { const res = normalizeAddr(`${st}, ${h}`); geocodeCacheRef.current.set(key, res); return res; }
-          }
-        }
-      } catch (_) {}
-    }
-
-  if (street) { const res = normalizeAddr(`${districtOSM ? districtOSM + ', ' : ''}${street}`); geocodeCacheRef.current.set(key, res); return res; }
-  if (fallbackText) { const res = normalizeAddr(fallbackText); geocodeCacheRef.current.set(key, res); return res; }
-
-  // 4) Expo device reverse geocoder as last resort
-  try {
-    const arr = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-    if (Array.isArray(arr) && arr.length) {
-      const it = arr[0] || {};
-      const street2 = it.street || it.name || null;
-      const house2 = it.streetNumber || it.name || null;
-      if (street2 && house2) { const res = normalizeAddr(`${street2}, ${house2}`); geocodeCacheRef.current.set(key, res); return res; }
-      if (street2) { const res = normalizeAddr(street2); geocodeCacheRef.current.set(key, res); return res; }
-    }
-  } catch (_) {}
-  // Не кэшируем неуспех, чтобы была возможность повторной попытки
-  return null;
-  }, [distMeters, normalizeAddr, overpassQuery, fetchJSON]);
 
   // ...
 
@@ -737,10 +488,13 @@ export default function HomeScreen({ navigation }) {
   const onMapReady = useCallback(() => {}, []);
   const onMapClickCb = useCallback((p) => {
     const { latitude, longitude } = p;
-    setRouteInfo(null);
     Keyboard.dismiss();
+    // Используем только ref чтобы избежать race condition с onBlur
+    const currentActiveField = activeFieldRef.current;
+    console.log('[MAP CLICK] activeFieldRef:', activeFieldRef.current, 'chosen:', currentActiveField);
     // Если активно поле A — выбор точки по карте заполняет A и ставит старт
-    if (activeField === 'A') {
+    if (currentActiveField === 'A') {
+      // НЕ удаляем destination и pending - точка B должна оставаться
       // Быстрая подстановка и центрирование
       if (p.address && typeof p.address === 'string') {
         try { setAddrA(normalizeAddr(p.address)); } catch(_) {}
@@ -753,16 +507,30 @@ export default function HomeScreen({ navigation }) {
       startIsManualRef.current = true;
   setStartVisible(true);
       setActiveField(null);
+      activeFieldRef.current = null;
       setSuggestions([]);
       // Асинхронно уточняем адрес и номер дома
       (async () => {
         try {
-          let addr = p.address ? normalizeAddr(p.address) : await reverseAddressBest(latitude, longitude);
+          // Если карта вернула адрес, используем его только если он не выглядит как уровень района/страны.
+          // Иначе — принудительно обращаемся к нашему backend reverse (2GIS parsing).
+          let addr = null;
+          if (p.address && typeof p.address === 'string') {
+            const cand = normalizeAddr(p.address);
+            if (cand && !isRegionLevelAddr(cand)) {
+              addr = cand;
+            }
+          }
+          if (!addr) {
+            addr = await reverseAddressBest(latitude, longitude);
+          }
+
           if (addr && !hasHouseNumber(addr)) {
             const baseSt = extractBaseStreet(addr);
             const refined = await refineHouseNumber(latitude, longitude, baseSt);
             if (refined) addr = refined;
           }
+
           if (!addr) {
             try {
               const nj = await fetchJSON(`https://router.project-osrm.org/nearest/v1/driving/${longitude},${latitude}`);
@@ -777,6 +545,8 @@ export default function HomeScreen({ navigation }) {
     }
 
     // Иначе — это выбор точки B как и раньше
+    // При клике на карту для B - НЕ очищаем маршрут, пусть остается пока строится новый
+    console.log('[MAP CLICK] Setting pending for point B:', { latitude, longitude, address: p.address });
     const initial = { latitude, longitude };
     if (p.address) initial.address = normalizeAddr(p.address);
     setPending(initial);
@@ -786,11 +556,20 @@ export default function HomeScreen({ navigation }) {
       setAddrB('');
     }
     setActiveField(null);
+    activeFieldRef.current = null;
     setSuggestions([]);
     (async () => {
       try {
-        if (p.address) {
-          let addr = normalizeAddr(p.address);
+        if (p.address && typeof p.address === 'string') {
+          // Если карта дала адрес, используем его только если он не выглядит как уровень района/страны.
+          let cand = normalizeAddr(p.address);
+          let addr = null;
+          if (cand && !isRegionLevelAddr(cand)) {
+            addr = cand;
+          }
+          if (!addr) {
+            addr = await reverseAddressBest(latitude, longitude);
+          }
           if (addr && !hasHouseNumber(addr)) {
             const baseSt = extractBaseStreet(addr);
             const refined = await refineHouseNumber(latitude, longitude, baseSt);
@@ -817,7 +596,7 @@ export default function HomeScreen({ navigation }) {
         }
       } catch(_) {}
     })();
-  }, [activeField, reverseAddressBest, normalizeAddr, hasHouseNumber, refineHouseNumber, extractBaseStreet, fetchJSON]);
+  }, [reverseAddressBest, normalizeAddr, hasHouseNumber, refineHouseNumber, extractBaseStreet, fetchJSON]);
   const onRouteCb = useCallback((info) => { setRouteInfo(info); setIsBuilding(false); }, []);
   const onErrorCb = useCallback(() => { setError('Не удалось отрисовать карту'); setIsBuilding(false); }, []);
 
@@ -966,9 +745,103 @@ export default function HomeScreen({ navigation }) {
           }
         } catch {}
       }
+      if (payload && payload.user && payload.action === 'profile:update') {
+        try {
+          await AsyncStorage.setItem('tow_user', JSON.stringify(payload.user));
+        } catch {}
+      }
     });
     return () => { try { off && off(); } catch {} };
   }, [placeOrder]);
+
+  // Автоматическое построение маршрута когда есть точка A и pending точка B
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      // Проверяем: есть ли startPoint (точка A) и pending (точка B)?
+      if (!startPoint || !pending) return;
+      if (!pending.latitude || !pending.longitude) return;
+      
+      console.log('[AUTO BUILD] Building route from', startPoint, 'to', pending);
+      
+      // ВАЖНО: Фиксируем точку A при первом построении маршрута, чтобы она не двигалась
+      if (!startIsManualRef.current) {
+        setStartIsManual(true);
+        startIsManualRef.current = true;
+        setStartVisible(true);
+        console.log('[AUTO BUILD] Locking point A at', startPoint);
+      }
+      
+      // Начинаем построение (очищаем старый маршрут если был)
+      setIsBuilding(true);
+      setDestination(null);
+      setRouteInfo(null);
+      
+      // Устанавливаем destination чтобы карта построила маршрут
+      try {
+        let addr = pending.address;
+        if (!addr) {
+          addr = await reverseAddressBest(pending.latitude, pending.longitude);
+          if (addr && !hasHouseNumber(addr)) {
+            const baseSt = extractBaseStreet(addr);
+            const refined = await refineHouseNumber(pending.latitude, pending.longitude, baseSt);
+            if (refined) addr = refined;
+          }
+        }
+        setAddrB(addr || null);
+        
+        // Небольшая задержка перед установкой destination чтобы карта успела очиститься
+        setTimeout(() => {
+          setDestination({ latitude: pending.latitude, longitude: pending.longitude });
+          setPending(null);
+        }, 100);
+      } catch (e) {
+        console.error('[AUTO BUILD] Error:', e);
+        setIsBuilding(false);
+      }
+    }, 1000); // Задержка 1 секунда чтобы дать пользователю время на корректировку
+    
+    return () => clearTimeout(timer);
+  }, [startPoint, pending, reverseAddressBest, hasHouseNumber, extractBaseStreet, refineHouseNumber]);
+
+  // Перестроение маршрута когда изменилась точка A (startPoint) и уже есть точка B (destination)
+  useEffect(() => {
+    // Сохраняем текущий destination для следующего вызова
+    const hadDestination = prevDestinationRef.current !== null;
+    prevDestinationRef.current = destination;
+    
+    // Если нет startPoint или нет destination - ничего не делаем
+    if (!startPoint || !destination) return;
+    
+    // Если destination только что появился (не было раньше) - не перестраиваем, первый билд уже идёт
+    if (!hadDestination) return;
+    
+    const timer = setTimeout(() => {
+      console.log('[AUTO REBUILD] Rebuilding route: startPoint changed, destination exists');
+      
+      // Перестраиваем маршрут
+      setIsBuilding(true);
+      setRouteInfo(null);
+      
+      // Сбрасываем и заново устанавливаем destination чтобы карта перестроила маршрут
+      const dest = { ...destination };
+      setDestination(null);
+      
+      setTimeout(() => {
+        setDestination(dest);
+      }, 100);
+    }, 500); // Меньшая задержка так как это перестроение, а не новое построение
+    
+    return () => clearTimeout(timer);
+  }, [startPoint, destination]);
+
+  // Показать подсказку о редактировании когда есть адрес
+  useEffect(() => {
+    // Показываем подсказку если есть любой адрес
+    if ((addrA && addrA.trim()) || (addrB && addrB.trim())) {
+      console.log('[EDIT HINT] Address detected, showing hint');
+      setShowEditHint(true);
+    }
+  }, [addrA, addrB]);
 
   const startLocationFlow = async () => {
     try {
@@ -1049,11 +922,28 @@ export default function HomeScreen({ navigation }) {
       // Подписка на обновления (без агрессивной частоты)
       try {
     watchRef.current = await Location.watchPositionAsync(
-            { accuracy: Location.Accuracy.Balanced, timeInterval: 3000, distanceInterval: 5 },
+            { accuracy: Location.Accuracy.Balanced, timeInterval: 10000, distanceInterval: 10 },
           (update) => {
             const { latitude: lat, longitude: lng } = update.coords;
-      setUserCoords({ latitude: lat, longitude: lng });
-            if (!startIsManualRef.current) setStartPoint({ latitude: lat, longitude: lng });
+            const newCoords = { latitude: lat, longitude: lng };
+            
+            // Обновляем состояние только если координаты действительно изменились
+            setUserCoords(prev => {
+              if (!prev || Math.abs(prev.latitude - lat) > 0.00001 || Math.abs(prev.longitude - lng) > 0.00001) {
+                return newCoords;
+              }
+              return prev;
+            });
+            
+            if (!startIsManualRef.current) {
+              setStartPoint(prev => {
+                if (!prev || Math.abs(prev.latitude - lat) > 0.00001 || Math.abs(prev.longitude - lng) > 0.00001) {
+                  return newCoords;
+                }
+                return prev;
+              });
+            }
+            
             (async () => {
               try {
                 let addr = await reverseAddressBest(lat, lng);
@@ -1080,6 +970,9 @@ export default function HomeScreen({ navigation }) {
 
   // При монтировании: проверяем текущее разрешение
   useEffect(() => {
+    // Только при первой инициализации
+    if (isInitializedRef.current) return;
+    
     let mounted = true;
     (async () => {
       try {
@@ -1089,6 +982,7 @@ export default function HomeScreen({ navigation }) {
         if (current.status === 'granted') {
           setPermissionStatus('granted');
           startLocationFlow();
+          isInitializedRef.current = true;
         } else {
           setPermissionStatus('prompt');
           setLoading(false);
@@ -1101,7 +995,39 @@ export default function HomeScreen({ navigation }) {
     })();
     return () => {
       mounted = false;
-      if (watchRef.current) watchRef.current.remove();
+      // НЕ удаляем watchRef при размонтировании для сохранения отслеживания
+    };
+  }, []);
+
+  // Загрузка данных пользователя
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('tow_user');
+        if (raw) setUser(JSON.parse(raw));
+      } catch (_) {}
+    };
+    loadUser();
+
+    const handleAuthChange = () => loadUser();
+    onEvent('auth:changed', handleAuthChange);
+    
+    return () => {
+      // Отписка от события
+      try {
+        // eventBus не имеет off метода, но мы можем игнорировать это
+      } catch(_) {}
+    };
+  }, []);
+
+  // Очистка при полном размонтировании компонента
+  useEffect(() => {
+    return () => {
+      // Останавливаем отслеживание только при полном размонтировании
+      if (watchRef.current) {
+        watchRef.current.remove();
+        watchRef.current = null;
+      }
     };
   }, []);
 
@@ -1127,6 +1053,25 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // Мемоизация центра карты для предотвращения ненужных ре-рендеров
+  const mapCenter = React.useMemo(() => {
+    if (!region) return null;
+    return { latitude: region.latitude, longitude: region.longitude };
+  }, [region?.latitude, region?.longitude]);
+
+  // Мемоизация startPoint для карты
+  const mapStartPoint = React.useMemo(() => {
+    const point = startPoint || userCoords;
+    if (!point) return null;
+    return { latitude: point.latitude, longitude: point.longitude };
+  }, [startPoint?.latitude, startPoint?.longitude, userCoords?.latitude, userCoords?.longitude]);
+
+  // Мемоизация recenterCoords
+  const mapRecenterCoords = React.useMemo(() => {
+    if (!userCoords) return null;
+    return { latitude: userCoords.latitude, longitude: userCoords.longitude };
+  }, [userCoords?.latitude, userCoords?.longitude]);
+
   return (
     <View style={styles.container}>
       {permissionStatus !== 'granted' ? (
@@ -1147,21 +1092,72 @@ export default function HomeScreen({ navigation }) {
         </View>
       ) : region ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Кнопка меню в правом верхнем углу с анимацией scale */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 50,
+              right: 15,
+              zIndex: 1000,
+              transform: [{ scale: menuScaleAnim }],
+            }}
+          >
+            <TouchableOpacity
+              onPressIn={() => {
+                Animated.spring(menuScaleAnim, {
+                  toValue: 0.85,
+                  useNativeDriver: true,
+                  speed: 50,
+                  bounciness: 4,
+                }).start();
+              }}
+              onPressOut={() => {
+                Animated.spring(menuScaleAnim, {
+                  toValue: 1,
+                  useNativeDriver: true,
+                  speed: 50,
+                  bounciness: 4,
+                }).start();
+              }}
+              onPress={() => {
+                setMenuVisible(true);
+                Animated.spring(menuModalScale, {
+                  toValue: 1,
+                  useNativeDriver: true,
+                  speed: 12,
+                  bounciness: 8,
+                }).start();
+              }}
+              style={{
+                backgroundColor: 'white',
+                borderRadius: 8,
+                padding: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 3.84,
+                elevation: 5,
+              }}
+              activeOpacity={1}
+            >
+              <MaterialIcons name="menu" size={24} color="#000" />
+            </TouchableOpacity>
+          </Animated.View>
+
           <MapViewProvider
-            center={{ latitude: region.latitude, longitude: region.longitude }}
+            center={mapCenter}
             zoom={15}
             destination={destination}
             preview={pending}
-            start={startPoint || userCoords}
+            start={mapStartPoint}
             startIsManual={startIsManual}
             startVisible={startVisible}
             userLocation={userCoords}
             recenterAt={recenterTick}
-            recenterCoords={userCoords}
+            recenterCoords={mapRecenterCoords}
             resetAt={resetTick}
             clearDestinationAt={clearDestTick}
             clearRouteOnlyAt={clearRouteTick}
-            apiKey={Constants?.expoConfig?.extra?.yandex?.apiKey || ''}
             onReady={onMapReady}
             onMapClick={onMapClickCb}
             onRoute={onRouteCb}
@@ -1177,9 +1173,20 @@ export default function HomeScreen({ navigation }) {
   {/* coords badge removed per user request */}
 
     {/* Нижняя панель с двумя инпутами: A (текущее место, улица+дом) и B (назначение) */}
-  <View style={styles.addrInputsWrap} pointerEvents="auto">
-        {/* Информация о маршруте теперь внизу панели, над полями A и B */}
-        {routeInfo && (
+  <TouchableOpacity 
+    style={styles.addrInputsWrap} 
+    activeOpacity={1}
+    onPress={() => {/* Блокируем клики, чтобы они не проходили на карту */}}
+  >
+        {/* Информация о маршруте или индикатор загрузки */}
+        {isBuilding && destination && !routeInfo ? (
+          <View style={styles.routeBadge}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#0a84ff" style={{ marginRight: 8 }} />
+              <Text style={styles.routeText}>Строится маршрут...</Text>
+            </View>
+          </View>
+        ) : routeInfo ? (
           <View style={styles.routeBadge}>
             <View style={{ flex: 1 }}>
               {/* {(addrA || addrB) && (
@@ -1219,7 +1226,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.routeClear}>Сбросить</Text>
             </TouchableOpacity> */}
           </View>
-        )}
+        ) : null}
         {/* Подсказки по вводу A/B с анимацией загрузки — теперь над полями */}
         {activeField && (suggesting || (suggestions && suggestions.length > 0)) && (
           <View style={styles.suggestWrap}>
@@ -1235,6 +1242,7 @@ export default function HomeScreen({ navigation }) {
                   if (activeField === 'A') {
                     setAddrA(sug.address || sug.title);
                     if (Number.isFinite(sug.latitude) && Number.isFinite(sug.longitude)) {
+                      // При выборе A - НЕ удаляем точку B, только обновляем точку старта
                       // Центруем карту, не трогая координаты пользователя
                       setRegion({ latitude: sug.latitude, longitude: sug.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 });
                       // Устанавливаем ручной старт A
@@ -1242,15 +1250,22 @@ export default function HomeScreen({ navigation }) {
                       setStartIsManual(true);
                       startIsManualRef.current = true;
                       setStartVisible(true);
+                      setLastUserEditAt(Date.now());
                     }
                   } else if (activeField === 'B') {
                     setAddrB(sug.address || sug.title);
                     if (Number.isFinite(sug.latitude) && Number.isFinite(sug.longitude)) {
-                      setPending({ latitude: sug.latitude, longitude: sug.longitude, address: sug.address || sug.title });
+                      // При выборе B из suggest - сразу строим маршрут
+                      const newDest = { latitude: sug.latitude, longitude: sug.longitude };
+                      setDestination(newDest);
+                      setPending(null);
+                      setLastUserEditAt(Date.now());
+                      // Если есть точка A - маршрут построится автоматически через useEffect
                     }
                   }
                   setSuggestions([]);
                   setActiveField(null);
+                  activeFieldRef.current = null;
                 }}>
                 <Text numberOfLines={1} style={styles.suggestTitle}>{sug.title}</Text>
                 {!!sug.subtitle && <Text numberOfLines={1} style={styles.suggestSubtitle}>{sug.subtitle}</Text>}
@@ -1264,11 +1279,17 @@ export default function HomeScreen({ navigation }) {
           <TextInput
             ref={addrARef}
             style={styles.addrInput}
-            placeholder="Откуда"
+            placeholder="Откуда (можно уточнить: участок, дом и т.д.)"
             value={addrA ?? ''}
-    onFocus={() => setActiveField('A')}
-    onBlur={() => setActiveField(null)}
-  onChangeText={(t) => { setAddrA(t); setActiveField('A'); setLastUserEditAt(Date.now()); }}
+    onFocus={() => { setActiveField('A'); activeFieldRef.current = 'A'; }}
+    onBlur={() => { 
+      // Задержка перед сбросом, чтобы onMapClickCb успел прочитать значение
+      setTimeout(() => {
+        setActiveField(null); 
+        activeFieldRef.current = null;
+      }, 300);
+    }}
+  onChangeText={(t) => { setAddrA(t); setActiveField('A'); activeFieldRef.current = 'A'; setLastUserEditAt(Date.now()); }}
             editable
             returnKeyType="search"
             onSubmitEditing={async () => {
@@ -1283,8 +1304,9 @@ export default function HomeScreen({ navigation }) {
                   startIsManualRef.current = true;
                   setStartVisible(true);
                   setAddrA(res.address || addrA);
-      setSuggestions([]);
-      setActiveField(null);
+                  setSuggestions([]);
+                  setActiveField(null);
+                  setLastUserEditAt(Date.now());
                 }
               } catch(_) {}
             }}
@@ -1305,7 +1327,11 @@ export default function HomeScreen({ navigation }) {
               setRouteInfo(null);
               setClearRouteTick(t=>t+1);
               setSuggestions([]);
-              setActiveField(null);
+              
+              // Активируем поле A для выбора с карты (без открытия клавиатуры)
+              setActiveField('A');
+              activeFieldRef.current = 'A';
+              // НЕ фокусируем input чтобы клавиатура не открывалась
             }}
           >
             <MaterialIcons name="close" size={20} color="#0a84ff" />
@@ -1336,40 +1362,40 @@ export default function HomeScreen({ navigation }) {
             
             <MaterialIcons name="location-on" size={22} color="#0a84ff" />
           </TouchableOpacity>
-           <TouchableOpacity
-            style={styles.toolBtn}
-            activeOpacity={0.85}
-            onPress={() => {
-              if (HomeScreen._lockRC) return; HomeScreen._lockRC = true; setTimeout(() => { HomeScreen._lockRC = false; }, 350);
-              setRecenterTick(t => t + 1);
-            }}
-          >
-            <MaterialIcons name="my-location" size={18} color="#0a84ff" />
-          </TouchableOpacity>
         </View>
   <View style={[styles.addrRow, { marginTop: 8 }]} pointerEvents="auto">
           <TextInput
             ref={addrBRef}
             style={styles.addrInput}
-            placeholder="Куда"
+            placeholder="Куда (можно уточнить: участок, дом и т.д.)"
             value={addrB ?? (pending && pending.address ? normalizeAddr(pending.address) : '')}
-            onFocus={() => setActiveField('B')}
-            onBlur={() => setActiveField(null)}
-            onChangeText={(t) => { setAddrB(t); setActiveField('B'); setLastUserEditAt(Date.now()); }}
+            onFocus={() => { setActiveField('B'); activeFieldRef.current = 'B'; }}
+            onBlur={() => { 
+              // Задержка перед сбросом, чтобы onMapClickCb успел прочитать значение
+              setTimeout(() => {
+                setActiveField(null); 
+                activeFieldRef.current = null;
+              }, 300);
+            }}
+            onChangeText={(t) => { setAddrB(t); setActiveField('B'); activeFieldRef.current = 'B'; setLastUserEditAt(Date.now()); }}
             editable
             returnKeyType="search"
             onSubmitEditing={async () => {
               try {
                 const res = await geocodeTextBest(addrB);
                 if (res) {
-                  // Заполняем pending и показываем подтверждение для B
-                  setPending({ latitude: res.latitude, longitude: res.longitude, address: res.address });
+                  // При ручном вводе B - сразу устанавливаем destination для автоматического построения маршрута
+                  setAddrB(res.address || addrB);
+                  setDestination({ latitude: res.latitude, longitude: res.longitude });
+                  setPending(null);
                   setSuggestions([]);
                   setActiveField(null);
+                  setLastUserEditAt(Date.now());
                 }
               } catch(_) {}
             }}
           />
+          
           <TouchableOpacity
             style={[styles.clearBtnRight]}
             activeOpacity={0.8}
@@ -1380,88 +1406,33 @@ export default function HomeScreen({ navigation }) {
               setDestination(null);
               setRouteInfo(null);
               setClearDestTick(t=>t+1);
-              setResetTick(t=>t+1);
+              setClearRouteTick(t=>t+1);
+              // НЕ вызываем setResetTick - точка A должна остаться на месте
               setSuggestions([]);
-              setActiveField(null);
+              
+              // Активируем поле B для выбора с карты (без открытия клавиатуры)
+              setActiveField('B');
+              activeFieldRef.current = 'B';
+              // НЕ фокусируем input чтобы клавиатура не открывалась
             }}
           >
             <MaterialIcons name="close" size={20} color="#0a84ff" />
           </TouchableOpacity>
-          {(() => {
-            const aNow = norm(addrA);
-            const bNow = norm(addrB);
-            const builtA = norm(lastBuilt?.a);
-            const builtB = norm(lastBuilt?.b);
-            const inputsSame = !!routeInfo && aNow === builtA && bNow === builtB;
-            const buildLocked = !!routeInfo && inputsSame && lastBuildAt && (!lastUserEditAt || lastUserEditAt <= lastBuildAt);
-            return (
-          <TouchableOpacity
-            style={[
-              styles.routeBtn,
-              (isBuilding || buildLocked) ? { opacity: 0.5 } : null
-            ]}
-            activeOpacity={0.9}
-            disabled={isBuilding || buildLocked}
-            onPress={async () => {
-              try {
-                setIsBuilding(true);
-                // Require both fields A and B to be non-empty before building a route
-                const aText = (addrA || '').trim();
-                const bText = (addrB || '').trim();
-                if (!aText || !bText) {
-                  Alert.alert('Недостаточно данных', 'Заполните адреса A и B перед построением маршрута.');
-                  setIsBuilding(false);
-                  return;
-                }
-                if (pending && Number.isFinite(pending.latitude) && Number.isFinite(pending.longitude)) {
-                  // Подтверждаем маршрут до pending так же, как по кнопке "Да"
-                  let builtBText = bText;
-                  try {
-                    let tmp = pending.address ? normalizeAddr(pending.address) : await reverseAddressBest(pending.latitude, pending.longitude);
-                    if (tmp && !hasHouseNumber(tmp)) {
-                      const baseSt = extractBaseStreet(tmp);
-                      const refined = await refineHouseNumber(pending.latitude, pending.longitude, baseSt);
-                      if (refined) tmp = refined;
-                    }
-                    builtBText = tmp || bText || '';
-                    setAddrB(builtBText || null);
-                  } catch (e) { setAddrB(null); }
-                  setDestination({ latitude: pending.latitude, longitude: pending.longitude });
-                  setPending(null);
-                  setActiveField(null);
-                  setSuggestions([]);
-                  setLastBuilt({ a: norm(aText), b: norm(builtBText) });
-                  setLastBuildAt(Date.now());
-                  return;
-                }
-                const raw = (addrB || '').trim();
-                if (!raw) {
-                  Alert.alert('Точка B не задана', 'Введите адрес назначения или выберите точку на карте.');
-                  setIsBuilding(false);
-                  return;
-                }
-                const res = await geocodeTextBest(raw);
-                if (res && Number.isFinite(res.latitude) && Number.isFinite(res.longitude)) {
-                  setAddrB(res.address || raw);
-                  setDestination({ latitude: res.latitude, longitude: res.longitude });
-                  setPending(null);
-                  setActiveField(null);
-                  setSuggestions([]);
-                  setLastBuilt({ a: norm(aText), b: norm(res.address || raw) });
-                  setLastBuildAt(Date.now());
-                } else {
-                  // Nothing resolved
-                  setIsBuilding(false);
-                }
-              } catch(_) {}
-            }}
-          >
-            <Text style={styles.routeBtnText}>построить маршрут</Text>
-          </TouchableOpacity>
-            );
-          })()}
-          
         </View>
+        
+        {/* Подсказка о возможности редактирования адреса */}
+        {showEditHint && (
+          <View style={styles.editHint}>
+            <MaterialIcons name="info" size={16} color="#0a84ff" style={{ marginRight: 6 }} />
+            <Text style={styles.editHintText}>
+              💡 Адрес можно уточнить: добавьте номер участка, дома или ориентир
+            </Text>
+            <TouchableOpacity onPress={() => setShowEditHint(false)} style={{ marginLeft: 8 }}>
+              <MaterialIcons name="close" size={16} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
+        
         {/* Кнопка заказа эвакуатора: активна только после построения маршрута */}
         <TouchableOpacity
           style={[
@@ -1474,7 +1445,7 @@ export default function HomeScreen({ navigation }) {
         >
           <Text style={styles.orderBtnText}>Заказать</Text>
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
 
       {/* Окно входа/регистрации поверх всего */}
       <Modal visible={authOpen} transparent animationType="fade" onRequestClose={() => setAuthOpen(false)}>
@@ -1525,6 +1496,230 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
         </View>
+      </Modal>
+
+      {/* Модальное меню */}
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => {
+          Animated.timing(menuModalScale, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => setMenuVisible(false));
+        }}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+          }}
+          activeOpacity={1}
+          onPress={() => {
+            Animated.timing(menuModalScale, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start(() => setMenuVisible(false));
+          }}
+        >
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 50,
+              right: 15,
+              width: 260,
+              backgroundColor: 'white',
+              borderRadius: 16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 10,
+              transform: [{ scale: menuModalScale }],
+              transformOrigin: 'top right',
+            }}
+          >
+            {/* Профиль */}
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 18,
+                borderBottomWidth: 1,
+                borderBottomColor: '#f0f0f0',
+              }}
+              onPress={() => {
+                setMenuVisible(false);
+                menuModalScale.setValue(0);
+                navigation.navigate('Профиль');
+              }}
+            >
+              <View style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: '#4A90E2',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <MaterialIcons name="person" size={26} color="#fff" />
+              </View>
+              <View style={{ marginLeft: 14, flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#111' }}>
+                  {user?.name || 'Пользователь'}
+                </Text>
+                <Text style={{ fontSize: 13, color: '#888', marginTop: 2 }}>
+                  {user?.phone || 'Базовый план'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* ОСНОВНОЕ */}
+            <View style={{ paddingTop: 10 }}>
+              <Text style={{ 
+                fontSize: 11, 
+                fontWeight: '600', 
+                color: '#999', 
+                paddingHorizontal: 18, 
+                paddingVertical: 8,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}>
+                ОСНОВНОЕ
+              </Text>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 13,
+                  paddingHorizontal: 18,
+                }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  menuModalScale.setValue(0);
+                  navigation.navigate('История заказов');
+                }}
+              >
+                <MaterialIcons name="history" size={22} color="#666" />
+                <Text style={{ marginLeft: 14, fontSize: 15, color: '#111' }}>История</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 13,
+                  paddingHorizontal: 18,
+                }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  menuModalScale.setValue(0);
+                  // Активность - заглушка
+                }}
+              >
+                <MaterialIcons name="bolt" size={22} color="#666" />
+                <Text style={{ marginLeft: 14, fontSize: 15, color: '#111' }}>Активность</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 13,
+                  paddingHorizontal: 18,
+                }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  menuModalScale.setValue(0);
+                  // Интеграции - заглушка
+                }}
+              >
+                <MaterialIcons name="link" size={22} color="#666" />
+                <Text style={{ marginLeft: 14, fontSize: 15, color: '#111' }}>Интеграции</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* НАСТРОЙКИ */}
+            <View style={{ paddingTop: 10 }}>
+              <Text style={{ 
+                fontSize: 11, 
+                fontWeight: '600', 
+                color: '#999', 
+                paddingHorizontal: 18, 
+                paddingVertical: 8,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}>
+                НАСТРОЙКИ
+              </Text>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 13,
+                  paddingHorizontal: 18,
+                }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  menuModalScale.setValue(0);
+                  navigation.navigate('Настройки');
+                }}
+              >
+                <MaterialIcons name="settings" size={22} color="#666" />
+                <Text style={{ marginLeft: 14, fontSize: 15, color: '#111' }}>Настройки</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 13,
+                  paddingHorizontal: 18,
+                }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  menuModalScale.setValue(0);
+                  navigation.navigate('Служба поддержки');
+                }}
+              >
+                <MaterialIcons name="support-agent" size={22} color="#666" />
+                <Text style={{ marginLeft: 14, fontSize: 15, color: '#111' }}>Поддержка</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Выход */}
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 15,
+                paddingHorizontal: 18,
+                borderTopWidth: 1,
+                borderTopColor: '#f0f0f0',
+                marginTop: 8,
+              }}
+              onPress={async () => {
+                setMenuVisible(false);
+                menuModalScale.setValue(0);
+                try {
+                  await AsyncStorage.removeItem('tow_user');
+                  await AsyncStorage.removeItem('tow_token');
+                  setUser(null);
+                  emitEvent('auth:changed');
+                  Alert.alert('Выход', 'Вы вышли из системы');
+                } catch (_) {}
+              }}
+            >
+              <MaterialIcons name="logout" size={22} color="#E74C3C" />
+              <Text style={{ marginLeft: 14, fontSize: 15, color: '#E74C3C' }}>Выход</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
       </Modal>
 
   {/* Кнопка заявки удалена: теперь выбор точки на карте и подтверждение формирует заявку. */}
@@ -1729,6 +1924,13 @@ const styles = StyleSheet.create({
     elevation: 2,
     fontSize: 17,
   },
+  editIconContainer: {
+    width: 24,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
   clearBtnRight: {
     width: 30,
     height: 44,
@@ -1740,10 +1942,27 @@ const styles = StyleSheet.create({
     shadowColor: '#979696ff',
     elevation: 2,
   },
+  editHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#b3d9ff',
+  },
+  editHintText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#333',
+    lineHeight: 18,
+  },
   addrFillBtn: {
     marginLeft: 8,
-    marginRight: 4,
-    paddingHorizontal: 10,
+    marginRight: 0,
+    width: 44,
     height: 44,
     borderRadius: 30,
     backgroundColor: '#f2f6ff',

@@ -45,34 +45,48 @@ export default function LoginScreen({ navigation }) {
     if (!p) { Alert.alert('Ошибка', 'Введите номер телефона'); return; }
     setLoading(true);
     try {
+      console.log('[LOGIN] Sending code to:', p);
       const j = await authRequestCode(p);
-      if (j && j.userExists === false) {
-        try {
-          const { navigate } = require('../navigation/navigationRef');
-          navigate('Регистрация', { phone: p, devCode: j?.devCode || null });
-          return;
-        } catch {}
+      if (j?.phoneDisplay || j?.phone) {
+        setPhone(j.phoneDisplay || j.phone);
       }
+      console.log('[LOGIN] Response:', j);
+      // Показываем код в dev-режиме
       if (j?.devCode) {
         const hint = `Код (dev): ${j.devCode}`;
         setDevHint(hint);
         try { Alert.alert('Код отправлен', `Ваш код: ${j.devCode}`); } catch {}
+      } else {
+        try { Alert.alert('Код отправлен', 'Введите код из SMS'); } catch {}
       }
       setStep(2);
-    } catch (_) {
-      Alert.alert('Ошибка', 'Не удалось отправить код');
+    } catch (err) {
+      console.error('[LOGIN] Error:', err);
+      const msg = err?.message === 'invalid_phone_number'
+        ? 'Введите корректный номер телефона'
+        : `Не удалось отправить код: ${err?.message || err}`;
+      Alert.alert('Ошибка', msg);
     } finally { setLoading(false); }
   };
 
   const verifyCode = async () => {
     const p = phone.trim();
     const c = code.trim();
+    console.log('[LOGIN] Verifying code:', { phone: p, code: c });
     if (!p || !c) { Alert.alert('Ошибка', 'Введите все поля'); return; }
     setLoading(true);
     try {
-      const j = await verifyAuth({ phone: p, code: c });
-      if (j?.token) await AsyncStorage.setItem('tow_token', j.token);
-      if (j?.user) await AsyncStorage.setItem('tow_user', JSON.stringify(j.user));
+    console.log('[LOGIN] Calling verifyAuth...');
+    const j = await verifyAuth({ phone: p, code: c });
+      console.log('[LOGIN] Verify response:', j);
+      if (j?.token) {
+        await AsyncStorage.setItem('tow_token', j.token);
+        console.log('[LOGIN] Token saved:', j.token);
+      }
+      if (j?.user) {
+        await AsyncStorage.setItem('tow_user', JSON.stringify(j.user));
+        console.log('[LOGIN] User saved:', j.user);
+      }
   // Notify globally
   try { emitEvent('auth:changed', { user: j?.user || null, token: j?.token || null, action: 'login' }); } catch {}
       // Return to main app
@@ -80,7 +94,8 @@ export default function LoginScreen({ navigation }) {
       try { const { navigate } = require('../navigation/navigationRef'); navigate('Карта'); } catch {}
       Alert.alert('Готово', 'Вы вошли в аккаунт');
     } catch (e) {
-      const msg = (e && e.message) || 'Неверный код';
+      console.error('[LOGIN] Verify error:', e);
+      const msg = e?.message === 'invalid_phone_number' ? 'Введите корректный номер телефона' : ((e && e.message) || 'Неверный код');
       Alert.alert('Ошибка', msg);
     } finally { setLoading(false); }
   };

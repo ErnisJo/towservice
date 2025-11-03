@@ -3,6 +3,7 @@
     "name": "TowService",
     "slug": "tow-service",
     "version": "1.0.0",
+    "sdkVersion": "48.0.0",
     "platforms": [
       "ios",
       "android"
@@ -22,15 +23,19 @@
       ]
     },
     "extra": {
-      "mapProvider": "web",
-      "yandex": {
-  "apiKey": "b096e152-d41c-4823-ace3-b2f0e6cc8004",
-  "mapType": "yandex#satellite"
+      "mapProvider": "maptiler",
+      "dgisApiKey": "c67b9f66-6f5a-458d-8682-9b452c85f011",
+      "maptilerApiKey": "stW9wsgeZAe9aiEaxvNR",
+      "mapTiles": {
+        "provider": "maptiler",
+        "apiKey": "stW9wsgeZAe9aiEaxvNR",
+        "style": "streets-v2",
+        "language": "ru"
       },
       "eas": {
         "projectId": "59139523-09db-4fd5-a584-c6d34aeb9661"
-    },
-    "apiBase": "http://localhost:4001"
+      },
+      "apiBase": "http://192.168.0.102:4001"
     }
   }
 }

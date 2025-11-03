@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Эвакуатор - Bento Style</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'SF Pro Display', sans-serif;
+      background: #0a0a0a;
+      color: #ffffff;
+      overflow: hidden;
+    }
+
+    .app-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      padding: 12px;
+      gap: 12px;
+    }
+
+    /* Bento Grid Layout */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      grid-template-rows: auto auto auto;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .bento-card {
+      background: linear-gradient(145deg, #1a1a1a 0%, #0f0f0f 100%);
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .bento-card:hover {
+      border-color: rgba(255, 255, 255, 0.1);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Карта - занимает большую область */
+    .map-card {
+      grid-column: 1 / 4;
+      grid-row: 1 / 3;
+      background: linear-gradient(145deg, #1a1a1a 0%, #0f0f0f 100%);
+      position: relative;
+    }
+
+    .map-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: 
+        radial-gradient(circle at 30% 40%, rgba(59, 130, 246, 0.1) 0%, transparent 60%),
+        radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.1) 0%, transparent 60%);
+    }
+
+    .map-icon-wrapper {
+      text-align: center;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-15px); }
+    }
+
+    .map-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.7);
+      margin-top: 12px;
+    }
+
+    /* Маркеры */
+    .marker {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .marker.blue {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+      left: 35%;
+      top: 40%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .marker.purple {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+      left: 60%;
+      top: 50%;
+      animation: pulse 2s ease-in-out infinite;
+      animation-delay: 1s;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+      }
+      50% {
+        transform: scale(1.1);
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+      }
+    }
+
+    /* Контролы справа */
+    .controls-card {
+      grid-column: 4 / 5;
+      grid-row: 1 / 2;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .zoom-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .zoom-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: scale(1.05);
+    }
+
+    .zoom-btn:active {
+      transform: scale(0.95);
+    }
+
+    .center-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border: none;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    .center-btn:hover {
+      box-shadow: 0 6px 30px rgba(59, 130, 246, 0.4);
+      transform: scale(1.05);
+    }
+
+    .center-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Информация о маршруте */
+    .route-card {
+      grid-column: 4 / 5;
+      grid-row: 2 / 3;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .route-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .route-stat-label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .route-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .route-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    }
+
+    .route-cost-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      text-align: center;
+    }
+
+    .route-cost-value {
+      font-size: 28px;
+      font-weight: 800;
+      text-align: center;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-top: 4px;
+    }
+
+    /* Подсказки */
+    .suggestions-card {
+      grid-column: 1 / 4;
+      grid-row: 3 / 4;
+      padding: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .suggestions-title {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .suggestions-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .suggestion-item {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .suggestion-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .suggestion-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.9);
+      margin-bottom: 4px;
+    }
+
+    .suggestion-subtitle {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Инпуты и действия */
+    .actions-card {
+      grid-column: 4 / 5;
+      grid-row: 3 / 4;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-group {
+      position: relative;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 14px 40px 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 14px;
+      color: white;
+      transition: all 0.3s ease;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.5);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+    }
+
+    .input-field::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .clear-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.2s ease;
+      opacity: 0;
+    }
+
+    .input-field:not(:placeholder-shown) ~ .clear-btn {
+      opacity: 1;
+    }
+
+    .clear-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      color: white;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 6px 30px rgba(59, 130, 246, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-success:hover {
+      box-shadow: 0 6px 30px rgba(16, 185, 129, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .btn-success:active {
+      transform: translateY(0);
+    }
+
+    /* Загрузчик */
+    .loader {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Скроллбар */
+    .suggestions-card::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .suggestions-card::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .suggestions-card::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+    }
+
+    .suggestions-card::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Адаптивность */
+    @media (max-width: 1024px) {
+      .bento-grid {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto auto auto;
+      }
+      
+      .map-card {
+        grid-column: 1 / 3;
+        grid-row: 1 / 2;
+      }
+      
+      .controls-card {
+        grid-column: 1 / 2;
+        grid-row: 2 / 3;
+      }
+      
+      .route-card {
+        grid-column: 2 / 3;
+        grid-row: 2 / 3;
+      }
+      
+      .suggestions-card {
+        grid-column: 1 / 3;
+        grid-row: 3 / 4;
+      }
+      
+      .actions-card {
+        grid-column: 1 / 3;
+        grid-row: 4 / 5;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div class="bento-grid">
+      <!-- Карта -->
+      <div class="bento-card map-card">
+        <div class="map-content">
+          <div class="map-icon-wrapper">
+            <div style="font-size: 64px;">🗺️</div>
+            <div class="map-text">Карта 2GIS</div>
+          </div>
+          <!-- Маркеры -->
+          <div class="marker blue"></div>
+          <div class="marker purple"></div>
+        </div>
+      </div>
+
+      <!-- Контролы -->
+      <div class="bento-card controls-card">
+        <div class="control-label">Управление</div>
+        <button class="zoom-btn" onclick="zoomIn()">+</button>
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+        <button class="center-btn" onclick="centerMap()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          Центр
+        </button>
+      </div>
+
+      <!-- Информация о маршруте -->
+      <div class="bento-card route-card" id="routeCard" style="display: none;">
+        <div class="route-stat">
+          <div class="route-stat-label">Расстояние</div>
+          <div class="route-stat-value">12.3 км</div>
+        </div>
+        <div class="route-divider"></div>
+        <div class="route-stat">
+          <div class="route-stat-label">Время</div>
+          <div class="route-stat-value">18 мин</div>
+        </div>
+        <div class="route-divider"></div>
+        <div>
+          <div class="route-cost-label">Стоимость</div>
+          <div class="route-cost-value">950 ₸</div>
+        </div>
+      </div>
+
+      <!-- Подсказки -->
+      <div class="bento-card suggestions-card" id="suggestionsCard" style="display: none;">
+        <div class="suggestions-title">Подсказки</div>
+        <div class="suggestions-list">
+          <div class="suggestion-item" onclick="selectSuggestion('проспект Чынгыза Айтматова')">
+            <div class="suggestion-title">пр. Чынгыза Айтматова</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+          <div class="suggestion-item" onclick="selectSuggestion('проспект Манаса')">
+            <div class="suggestion-title">пр. Манаса</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+          <div class="suggestion-item" onclick="selectSuggestion('улица Мира')">
+            <div class="suggestion-title">ул. Мира</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+          <div class="suggestion-item" onclick="selectSuggestion('Московская улица')">
+            <div class="suggestion-title">Московская ул.</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Действия -->
+      <div class="bento-card actions-card">
+        <div class="input-group">
+          <input 
+            type="text" 
+            class="input-field" 
+            id="inputA"
+            placeholder="Откуда"
+            onfocus="showSuggestions()"
+            oninput="handleInput()"
+          />
+          <button class="clear-btn" onclick="clearInput('A')">×</button>
+        </div>
+        
+        <div class="input-group">
+          <input 
+            type="text" 
+            class="input-field" 
+            id="inputB"
+            placeholder="Куда"
+            onfocus="showSuggestions()"
+            oninput="handleInput()"
+          />
+          <button class="clear-btn" onclick="clearInput('B')">×</button>
+        </div>
+
+        <button class="btn btn-primary" id="buildBtn" onclick="buildRoute()">
+          <span id="buildText">Построить</span>
+        </button>
+        
+        <button class="btn btn-success" id="orderBtn" onclick="placeOrder()" style="display: none;">
+          Заказать
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let routeBuilt = false;
+
+    function showSuggestions() {
+      document.getElementById('suggestionsCard').style.display = 'block';
+    }
+
+    function hideSuggestions() {
+      setTimeout(() => {
+        document.getElementById('suggestionsCard').style.display = 'none';
+      }, 200);
+    }
+
+    function handleInput() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+      
+      if (inputA.length > 1 || inputB.length > 1) {
+        showSuggestions();
+      }
+    }
+
+    function selectSuggestion(text) {
+      const activeInput = document.activeElement;
+      if (activeInput && activeInput.classList.contains('input-field')) {
+        activeInput.value = text;
+      }
+      hideSuggestions();
+    }
+
+    function clearInput(field) {
+      document.getElementById('input' + field).value = '';
+      if (field === 'B' && routeBuilt) {
+        document.getElementById('routeCard').style.display = 'none';
+        document.getElementById('orderBtn').style.display = 'none';
+        document.getElementById('buildBtn').style.display = 'block';
+        routeBuilt = false;
+      }
+    }
+
+    function buildRoute() {
+      const btn = document.getElementById('buildBtn');
+      const text = document.getElementById('buildText');
+      
+      text.innerHTML = '<div class="loader"></div>';
+      btn.style.pointerEvents = 'none';
+      
+      setTimeout(() => {
+        document.getElementById('routeCard').style.display = 'flex';
+        document.getElementById('orderBtn').style.display = 'block';
+        btn.style.display = 'none';
+        text.textContent = 'Построить';
+        btn.style.pointerEvents = 'auto';
+        routeBuilt = true;
+      }, 1500);
+    }
+
+    function placeOrder() {
+      alert('🚗 Заказ оформлен!\n\nВодитель уже выехал к вам.');
+    }
+
+    function zoomIn() {
+      console.log('Zoom in');
+    }
+
+    function zoomOut() {
+      console.log('Zoom out');
+    }
+
+    function centerMap() {
+      console.log('Center map');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.input-field') && !e.target.closest('.suggestions-card')) {
+        document.getElementById('suggestionsCard').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

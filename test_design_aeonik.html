@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Эвакуатор - Aeonik Style</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Хедер */
+    .header {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .app-title {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      color: #1a1a1a;
+    }
+
+    .menu-btn {
+      width: 44px;
+      height: 44px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      justify-content: center;
+      align-items: center;
+      padding: 10px;
+    }
+
+    .menu-line {
+      width: 24px;
+      height: 2px;
+      background: #1a1a1a;
+      border-radius: 2px;
+    }
+
+    /* Меню панель */
+    .menu-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 280px;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      z-index: 20;
+      overflow: hidden;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .menu-panel.hidden {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.95);
+      pointer-events: none;
+    }
+
+    .menu-close {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #666;
+      transition: all 0.2s ease;
+      background: transparent;
+    }
+
+    .menu-close:hover {
+      background: #f8f8f8;
+      color: #1a1a1a;
+    }
+
+    .menu-header {
+      padding: 20px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .menu-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .menu-user-info {
+      flex: 1;
+    }
+
+    .menu-user-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 2px;
+    }
+
+    .menu-user-plan {
+      font-size: 13px;
+      color: #8a8a8a;
+    }
+
+    .menu-section {
+      padding: 8px;
+    }
+
+    .menu-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8a8a8a;
+      padding: 12px 12px 8px 12px;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .menu-item:hover {
+      background: #f8f8f8;
+    }
+
+    .menu-item-icon {
+      width: 20px;
+      font-size: 16px;
+      text-align: center;
+    }
+
+    .menu-item-text {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+    }
+
+    .menu-divider {
+      height: 1px;
+      background: #f0f0f0;
+      margin: 8px 0;
+    }
+
+    /* Статус панель */
+    .status-bar {
+      position: absolute;
+      top: 90px;
+      left: 20px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 16px;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-icon {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: #f5f5f5;
+    }
+
+    .status-text {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .status-subtext {
+      font-size: 13px;
+      color: #8a8a8a;
+      margin-top: 2px;
+    }
+
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-value {
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-ring {
+      width: 48px;
+      height: 48px;
+      border: 2px solid #e5e5e5;
+      border-radius: 50%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      background: #f5f5f5;
+    }
+
+    /* Основная сетка */
+    .main-content {
+      flex: 1;
+      position: relative;
+    }
+
+    .main-left {
+      width: 100%;
+      height: 100%;
+    }
+
+    .main-right {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      max-height: 70vh;
+    }
+
+    /* Карточка */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .card-action {
+      font-size: 13px;
+      color: #666;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    /* Карта */
+    .map-card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+    }
+
+    .map-container {
+      width: 100%;
+      height: 100%;
+      background: #e0ddd0;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .map-placeholder {
+      text-align: center;
+      color: #666;
+    }
+
+    .map-icon-large {
+      font-size: 64px;
+      margin-bottom: 8px;
+      opacity: 0.4;
+    }
+
+    /* Маркеры */
+    .map-marker {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 3px solid #1a1a1a;
+      border-radius: 50%;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .map-marker.point-a {
+      left: 25%;
+      top: 30%;
+    }
+
+    .map-marker.point-b {
+      right: 25%;
+      bottom: 35%;
+    }
+
+    /* Маршрутная линия */
+    .route-line {
+      position: absolute;
+      height: 3px;
+      background: #1a1a1a;
+      left: 27%;
+      top: 32%;
+      width: 45%;
+      transform: rotate(25deg);
+      transform-origin: 0 0;
+    }
+
+    /* Zoom контролы */
+    .zoom-controls {
+      position: absolute;
+      right: 20px;
+      top: 47%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 5;
+    }
+
+    .zoom-btn {
+      width: 40px;
+      height: 40px;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .zoom-btn:hover {
+      background: #f8f8f8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    .zoom-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Инпуты */
+    .inputs-card {
+      border-radius: 24px 24px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: block;
+      color: #8a8a8a;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 14px 40px 14px 16px;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      color: #1a1a1a;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:focus {
+      outline: none;
+      background: #ffffff;
+      border-color: #4a90e2;
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    }
+
+    .input-field::placeholder {
+      color: #999;
+    }
+
+    .input-clear {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: 28px;
+      height: 28px;
+      background: #e5e5e5;
+      border: none;
+      border-radius: 50%;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      opacity: 0;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:not(:placeholder-shown) ~ .input-clear {
+      opacity: 1;
+    }
+
+    .input-clear:hover {
+      background: #d5d5d5;
+    }
+
+    .input-clear:active {
+      transform: scale(0.9);
+    }
+
+    /* Статистика */
+    .stats-card {
+      gap: 16px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat-item {
+      background: #f8f8f8;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8a8a8a;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px;
+    }
+
+    .stat-unit {
+      font-size: 16px;
+      font-weight: 500;
+      margin-left: 2px;
+    }
+
+    .cost-item {
+      grid-column: span 2;
+      background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+      color: #ffffff;
+      border: none;
+    }
+
+    .cost-item .stat-label {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* Кнопки */
+    .button {
+      width: 100%;
+      padding: 16px;
+      background: #ffffff;
+      border: none;
+      border-radius: 12px;
+      color: #0788b8;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(74, 144, 226, 0.4);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .button.secondary {
+      background: #f8f8f8;
+      color: #1a1a1a;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .button.secondary:hover {
+      background: #efefef;
+    }
+
+    /* Подсказки */
+    .suggestions-card {
+      max-height: 280px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+      border-radius: 16px;
+    }
+
+    .suggestion-item {
+      padding: 14px 16px;
+      background: #ffffff;
+      border: none;
+      border-radius: 0;
+      margin-bottom: 0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .suggestion-item:first-child {
+      border-radius: 16px 16px 0 0;
+    }
+
+    .suggestion-item:last-child {
+      margin-bottom: 0;
+      border-bottom: none;
+      border-radius: 0 0 16px 16px;
+    }
+
+    .suggestion-item:hover {
+      background: #f8f8f8;
+    }
+
+    .suggestion-item:active {
+      background: #f0f0f0;
+    }
+
+    .suggestion-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+    }
+
+    .suggestion-subtitle {
+      font-size: 13px;
+      color: #8a8a8a;
+    }
+
+    /* Расписание/График */
+    .schedule-card {
+      grid-column: span 2;
+      overflow-y: auto;
+    }
+
+    .schedule-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #ffffff;
+      border: 2px solid #1a1a1a;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .schedule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: #ffffff;
+      border: 2px solid #1a1a1a;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .schedule-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .schedule-label {
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .schedule-value {
+      font-variant-numeric: tabular-nums;
+      margin-right: 12px;
+    }
+
+    /* Toggle */
+    .toggle {
+      width: 52px;
+      height: 28px;
+      background: #ffffff;
+      border: 2px solid #1a1a1a;
+      border-radius: 14px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .toggle.active {
+      background: #1a1a1a;
+    }
+
+    .toggle-handle {
+      width: 20px;
+      height: 20px;
+      background: #1a1a1a;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: all 0.2s ease;
+    }
+
+    .toggle.active .toggle-handle {
+      background: #ffffff;
+      left: 26px;
+    }
+
+    /* Loader */
+    .loader {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Скроллбар */
+    .main-right::-webkit-scrollbar,
+    .suggestions-card::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .main-right::-webkit-scrollbar-track,
+    .suggestions-card::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .main-right::-webkit-scrollbar-thumb,
+    .suggestions-card::-webkit-scrollbar-thumb {
+      background: rgba(26, 26, 26, 0.3);
+      border-radius: 10px;
+    }
+
+    /* Скрытие элементов */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Хедер -->
+    <div class="header">
+      <div class="app-title">Эвакуатор</div>
+      <button class="menu-btn" onclick="toggleMenu()">
+        <div class="menu-line"></div>
+        <div class="menu-line"></div>
+        <div class="menu-line"></div>
+      </button>
+    </div>
+
+    <!-- Меню панель -->
+    <div class="menu-panel hidden" id="menuPanel">
+      <button class="menu-close" onclick="toggleMenu()">×</button>
+      
+      <div class="menu-header">
+        <div class="menu-user">
+          <div class="menu-avatar">👤</div>
+          <div class="menu-user-info">
+            <div class="menu-user-name">Пользователь</div>
+            <div class="menu-user-plan">Базовый план</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <div class="menu-section-title">Основное</div>
+        <div class="menu-item" onclick="alert('История')">
+          <div class="menu-item-icon">📋</div>
+          <div class="menu-item-text">История</div>
+        </div>
+        <div class="menu-item" onclick="alert('Активность')">
+          <div class="menu-item-icon">⚡</div>
+          <div class="menu-item-text">Активность</div>
+        </div>
+        <div class="menu-item" onclick="alert('Интеграции')">
+          <div class="menu-item-icon">🔗</div>
+          <div class="menu-item-text">Интеграции</div>
+        </div>
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-section">
+        <div class="menu-section-title">Настройки</div>
+        <div class="menu-item" onclick="alert('Настройки аккаунта')">
+          <div class="menu-item-icon">⚙️</div>
+          <div class="menu-item-text">Настройки</div>
+        </div>
+        <div class="menu-item" onclick="alert('Поддержка')">
+          <div class="menu-item-icon">💬</div>
+          <div class="menu-item-text">Поддержка</div>
+        </div>
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-section">
+        <div class="menu-item" onclick="alert('Выход')">
+          <div class="menu-item-icon">🚪</div>
+          <div class="menu-item-text">Выход</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Статус бар -->
+    <div class="status-bar" id="statusBar">
+      <div class="status-left">
+        <div class="status-icon">🚗</div>
+        <div>
+          <div class="status-text">Готов к маршруту</div>
+          <div class="status-subtext">Укажите точки А и Б</div>
+        </div>
+      </div>
+      <div class="status-right">
+        <div class="status-value" id="statusValue">—</div>
+      </div>
+    </div>
+
+    <!-- Основной контент -->
+    <div class="main-content">
+      <!-- Карта на весь экран -->
+      <div class="main-left">
+        <div class="map-card">
+          <div class="map-container">
+            <div class="map-placeholder">
+              <div class="map-icon-large">🗺️</div>
+              <div>Бишкек, Кыргызстан</div>
+            </div>
+
+            <!-- Маркеры -->
+            <div class="map-marker point-a">A</div>
+            <div class="map-marker point-b">Б</div>
+            
+            <!-- Линия маршрута -->
+            <div class="route-line hidden" id="routeLine"></div>
+          </div>
+
+          <!-- Zoom контролы -->
+          <div class="zoom-controls">
+            <button class="zoom-btn" onclick="zoomIn()">+</button>
+            <button class="zoom-btn" onclick="zoomOut()">−</button>
+            <button class="zoom-btn" onclick="centerMap()">⊙</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Панель внизу - Инпуты и статистика -->
+      <div class="main-right">
+        <!-- Подсказки СВЕРХУ инпутов -->
+        <div class="suggestions-card hidden" id="suggestionsCard">
+          <div class="suggestion-item" onclick="selectSuggestion('пр. Чынгыза Айтматова, 56')">
+            <div class="suggestion-title">пр. Чынгыза Айтматова, 56</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+
+          <div class="suggestion-item" onclick="selectSuggestion('пр. Манаса, 23')">
+            <div class="suggestion-title">пр. Манаса, 23</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+
+          <div class="suggestion-item" onclick="selectSuggestion('ул. Мира, 14')">
+            <div class="suggestion-title">ул. Мира, 14</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+
+          <div class="suggestion-item" onclick="selectSuggestion('Московская ул., 89')">
+            <div class="suggestion-title">Московская ул., 89</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+
+          <div class="suggestion-item" onclick="selectSuggestion('ул. Тоголок Молдо, 45')">
+            <div class="suggestion-title">ул. Тоголок Молдо, 45</div>
+            <div class="suggestion-subtitle">Бишкек</div>
+          </div>
+        </div>
+
+        <!-- Статистика СВЕРХУ инпутов -->
+        <div class="card stats-card hidden" id="statsCard">
+          <div class="stat-grid">
+            <div class="stat-item">
+              <div class="stat-label">Расстояние</div>
+              <div class="stat-value">12.3<span class="stat-unit">км</span></div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-label">Время</div>
+              <div class="stat-value">18<span class="stat-unit">мин</span></div>
+            </div>
+
+            <div class="stat-item cost-item">
+              <div class="stat-label">Стоимость</div>
+              <div class="stat-value">950<span class="stat-unit">₸</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Инпуты ВНИЗУ -->
+        <div class="card inputs-card">
+          <div class="card-header">
+            <div class="card-title">Адреса</div>
+          </div>
+
+          <div class="input-wrapper">
+            <label class="input-label">Откуда</label>
+            <input 
+              type="text" 
+              class="input-field" 
+              id="inputA"
+              placeholder="Введите адрес"
+              onfocus="showSuggestions()"
+              oninput="handleInput()"
+            />
+            <button class="input-clear" onclick="clearInput('A')">×</button>
+          </div>
+
+          <div class="input-wrapper">
+            <label class="input-label">Куда</label>
+            <input 
+              type="text" 
+              class="input-field" 
+              id="inputB"
+              placeholder="Введите адрес"
+              onfocus="showSuggestions()"
+              oninput="handleInput()"
+            />
+            <button class="input-clear" onclick="clearInput('B')">×</button>
+          </div>
+
+          <button class="button" id="buildBtn" onclick="buildRoute()">
+            <span id="buildText">Построить</span>
+          </button>
+
+          <button class="button secondary hidden" id="orderBtn" onclick="placeOrder()">
+            Заказать
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let routeBuilt = false;
+
+    function toggleMenu() {
+      const menu = document.getElementById('menuPanel');
+      menu.classList.toggle('hidden');
+    }
+
+    function showSuggestions() {
+      document.getElementById('suggestionsCard').classList.remove('hidden');
+      document.getElementById('scheduleCard').classList.add('hidden');
+    }
+
+    function hideSuggestions() {
+      document.getElementById('suggestionsCard').classList.add('hidden');
+    }
+
+    function handleInput() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+      
+      if (inputA.length > 1 || inputB.length > 1) {
+        showSuggestions();
+      }
+    }
+
+    function selectSuggestion(text) {
+      const activeInput = document.activeElement;
+      if (activeInput && activeInput.classList.contains('input-field')) {
+        activeInput.value = text;
+      }
+      hideSuggestions();
+    }
+
+    function clearInput(field) {
+      const input = document.getElementById('input' + field);
+      input.value = '';
+      input.focus();
+      
+      if (field === 'B' && routeBuilt) {
+        resetRoute();
+      }
+    }
+
+    function buildRoute() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+
+      if (!inputA || !inputB) {
+        alert('Заполните оба адреса');
+        return;
+      }
+
+      const btn = document.getElementById('buildBtn');
+      const text = document.getElementById('buildText');
+      
+      text.innerHTML = '<div class="loader"></div>';
+      btn.style.pointerEvents = 'none';
+      
+      setTimeout(() => {
+        document.getElementById('statsCard').classList.remove('hidden');
+        document.getElementById('orderBtn').classList.remove('hidden');
+        document.getElementById('buildBtn').classList.add('hidden');
+        document.getElementById('routeLine').classList.remove('hidden');
+        document.getElementById('suggestionsCard').classList.add('hidden');
+        
+        // Обновить статус
+        document.getElementById('statusBar').querySelector('.status-text').textContent = 'Маршрут построен';
+        document.getElementById('statusBar').querySelector('.status-subtext').textContent = '12.3 км • 18 мин';
+        document.getElementById('statusValue').textContent = '950₸';
+        
+        text.textContent = 'Построить';
+        btn.style.pointerEvents = 'auto';
+        routeBuilt = true;
+      }, 1500);
+    }
+
+    function resetRoute() {
+      document.getElementById('statsCard').classList.add('hidden');
+      document.getElementById('orderBtn').classList.add('hidden');
+      document.getElementById('buildBtn').classList.remove('hidden');
+      document.getElementById('routeLine').classList.add('hidden');
+      
+      document.getElementById('statusBar').querySelector('.status-text').textContent = 'Готов к маршруту';
+      document.getElementById('statusBar').querySelector('.status-subtext').textContent = 'Укажите точки А и Б';
+      document.getElementById('statusValue').textContent = '—';
+      
+      routeBuilt = false;
+    }
+
+    function placeOrder() {
+      if (confirm('Заказать эвакуатор?\n\nСтоимость: 950₸\nВремя: 18 мин')) {
+        alert('✅ Заказ принят!\n\nВодитель уже в пути.');
+      }
+    }
+
+    function zoomIn() {
+      console.log('Zoom in');
+    }
+
+    function zoomOut() {
+      console.log('Zoom out');
+    }
+
+    function centerMap() {
+      console.log('Center map');
+    }
+
+    function toggleItem(element) {
+      element.classList.toggle('active');
+    }
+
+    // Закрытие меню и подсказок при клике вне
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('menuPanel');
+      const menuBtn = document.querySelector('.menu-btn');
+      
+      // Закрыть меню если клик вне его
+      if (!e.target.closest('.menu-panel') && !e.target.closest('.menu-btn')) {
+        menu.classList.add('hidden');
+      }
+      
+      // Закрыть подсказки если клик вне инпутов
+      if (!e.target.closest('.input-field') && 
+          !e.target.closest('#suggestionsCard') &&
+          !e.target.closest('.card-action')) {
+        const suggestionsCard = document.getElementById('suggestionsCard');
+        if (!suggestionsCard.classList.contains('hidden')) {
+          hideSuggestions();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

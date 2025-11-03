@@ -30,15 +30,20 @@ export default function RegisterScreen({ navigation }) {
     if (!p) { Alert.alert('Ошибка', 'Введите номер телефона'); return; }
     setLoading(true);
     try {
-  const j = await authRequestCode(p);
+      const j = await authRequestCode(p);
+      if (j?.phoneDisplay || j?.phone) {
+        setPhone(j.phoneDisplay || j.phone);
+      }
       if (j?.devCode) {
         const hint = `Код (dev): ${j.devCode}`;
         setDevHint(hint);
         try { Alert.alert('Код отправлен', `Ваш код: ${j.devCode}`); } catch {}
       }
       setStep(2);
-    } catch (_) {
-      Alert.alert('Ошибка', 'Не удалось отправить код');
+    } catch (err) {
+      console.error('[REGISTER] Error:', err);
+      const msg = err?.message === 'invalid_phone_number' ? 'Введите корректный номер телефона' : 'Не удалось отправить код';
+      Alert.alert('Ошибка', msg);
     } finally { setLoading(false); }
   };
 
@@ -56,7 +61,8 @@ export default function RegisterScreen({ navigation }) {
       try { const { navigate } = require('../navigation/navigationRef'); navigate('Карта'); } catch {}
       Alert.alert('Готово', 'Аккаунт создан, вы вошли');
     } catch (e) {
-      const msg = (e && e.message) || 'Неверный код';
+      console.error('[REGISTER] Verify error:', e);
+      const msg = e?.message === 'invalid_phone_number' ? 'Введите корректный номер телефона' : ((e && e.message) || 'Неверный код');
       Alert.alert('Ошибка', msg);
     } finally { setLoading(false); }
   };

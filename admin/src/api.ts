@@ -1,7 +1,18 @@
 function getBase(): string {
   const ls = typeof localStorage !== 'undefined' ? localStorage.getItem('tow_api_base') : null
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined
-  return (ls && ls.trim()) || env || 'http://localhost:4001'
+  
+  // If stored or env var exists, use it
+  if (ls && ls.trim()) return ls.trim()
+  if (env) return env
+  
+  // Try to detect network hostname dynamically
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `http://${window.location.hostname}:4001`
+  }
+  
+  // Default to network IP for towservice project
+  return 'http://192.168.0.101:4001'
 }
 
 export async function api(url: string, options: RequestInit = {}) {

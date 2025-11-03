@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Эвакуатор - Elegant Minimal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: #fafbfc;
+      color: #1a1a1a;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Хедер с минимальными деталями */
+    .header {
+      padding: 20px 24px;
+      background: #ffffff;
+      border-bottom: 1px solid #e8ebed;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a1a;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo::before {
+      content: '';
+      width: 4px;
+      height: 24px;
+      background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+      border-radius: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #e8ebed;
+      border-radius: 10px;
+      background: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 18px;
+    }
+
+    .icon-btn:hover {
+      border-color: #d1d5db;
+      background: #f9fafb;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* Основной контент */
+    .main-content {
+      flex: 1;
+      display: flex;
+      padding: 24px;
+      gap: 24px;
+      overflow: hidden;
+    }
+
+    /* Карта */
+    .map-section {
+      flex: 1;
+      background: #ffffff;
+      border: 1px solid #e8ebed;
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .map-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: 
+        linear-gradient(0deg, rgba(37, 99, 235, 0.02) 0%, transparent 100%);
+    }
+
+    .map-placeholder {
+      text-align: center;
+    }
+
+    .map-icon {
+      font-size: 56px;
+      margin-bottom: 12px;
+      opacity: 0.6;
+    }
+
+    .map-text {
+      font-size: 15px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    /* Маркеры на карте */
+    .marker {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+
+    .marker.point-a {
+      background: #2563eb;
+      left: 30%;
+      top: 35%;
+      animation: markerPulse 3s ease-in-out infinite;
+    }
+
+    .marker.point-b {
+      background: #7c3aed;
+      left: 65%;
+      top: 55%;
+      animation: markerPulse 3s ease-in-out infinite;
+      animation-delay: 1.5s;
+    }
+
+    @keyframes markerPulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      }
+      50% {
+        transform: scale(1.08);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+      }
+    }
+
+    /* Линия маршрута */
+    .route-line {
+      position: absolute;
+      left: 30%;
+      top: 35%;
+      width: 35%;
+      height: 2px;
+      background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
+      transform: rotate(20deg);
+      transform-origin: 0 0;
+      opacity: 0.6;
+      animation: routeAppear 1s ease-out;
+    }
+
+    @keyframes routeAppear {
+      from {
+        width: 0;
+        opacity: 0;
+      }
+      to {
+        width: 35%;
+        opacity: 0.6;
+      }
+    }
+
+    /* Контролы карты */
+    .map-controls {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .map-control-btn {
+      width: 44px;
+      height: 44px;
+      background: #ffffff;
+      border: 1px solid #e8ebed;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 500;
+      color: #374151;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .map-control-btn:hover {
+      background: #f9fafb;
+      border-color: #d1d5db;
+    }
+
+    .map-control-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Боковая панель */
+    .sidebar {
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Карточка */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e8ebed;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    /* Инпуты */
+    .input-group {
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .input-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .input-icon {
+      font-size: 16px;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 12px 36px 12px 14px;
+      border: 1px solid #e8ebed;
+      border-radius: 10px;
+      background: #fafbfc;
+      font-size: 15px;
+      color: #1a1a1a;
+      transition: all 0.2s ease;
+      font-weight: 400;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.05);
+    }
+
+    .input-field::placeholder {
+      color: #9ca3af;
+    }
+
+    .clear-input-btn {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+      opacity: 0;
+    }
+
+    .input-field:not(:placeholder-shown) ~ .clear-input-btn {
+      opacity: 1;
+    }
+
+    .clear-input-btn:hover {
+      background: #fee2e2;
+      color: #ef4444;
+    }
+
+    /* Подсказки */
+    .suggestions-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin: -8px -12px;
+      padding: 4px 12px;
+    }
+
+    .suggestion-item {
+      padding: 12px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-bottom: 4px;
+      border-left: 2px solid transparent;
+    }
+
+    .suggestion-item:hover {
+      background: #f9fafb;
+      border-left-color: #2563eb;
+    }
+
+    .suggestion-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+      margin-bottom: 2px;
+    }
+
+    .suggestion-subtitle {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    /* Информация о маршруте */
+    .route-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .route-stat {
+      text-align: center;
+      padding: 16px;
+      background: #fafbfc;
+      border-radius: 10px;
+      border: 1px solid #e8ebed;
+    }
+
+    .route-stat-label {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .route-stat-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: #1a1a1a;
+      letter-spacing: -0.5px;
+    }
+
+    .route-cost {
+      grid-column: 1 / 3;
+      text-align: center;
+      padding: 20px;
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      border-radius: 10px;
+      border: 1px solid #bbf7d0;
+    }
+
+    .route-cost-label {
+      font-size: 13px;
+      color: #166534;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .route-cost-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #15803d;
+      letter-spacing: -1px;
+    }
+
+    /* Кнопки */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-success:hover {
+      background: #059669;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+    }
+
+    .btn-success:active {
+      transform: scale(0.98);
+    }
+
+    /* Загрузчик */
+    .loader {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Скроллбар */
+    .suggestions-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .suggestions-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .suggestions-list::-webkit-scrollbar-thumb {
+      background: #e8ebed;
+      border-radius: 10px;
+    }
+
+    .suggestions-list::-webkit-scrollbar-thumb:hover {
+      background: #d1d5db;
+    }
+
+    /* Скрытие элементов */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Адаптивность */
+    @media (max-width: 1024px) {
+      .main-content {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+      }
+
+      .map-section {
+        min-height: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Хедер -->
+    <div class="header">
+      <div class="logo">Эвакуатор</div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="alert('История')">📋</button>
+        <button class="icon-btn" onclick="alert('Профиль')">👤</button>
+      </div>
+    </div>
+
+    <!-- Основной контент -->
+    <div class="main-content">
+      <!-- Карта -->
+      <div class="map-section">
+        <div class="map-content">
+          <div class="map-placeholder">
+            <div class="map-icon">🗺️</div>
+            <div class="map-text">Карта 2GIS</div>
+          </div>
+
+          <!-- Маркеры -->
+          <div class="marker point-a"></div>
+          <div class="marker point-b"></div>
+          
+          <!-- Линия маршрута -->
+          <div class="route-line" id="routeLine" style="display: none;"></div>
+        </div>
+
+        <!-- Контролы -->
+        <div class="map-controls">
+          <button class="map-control-btn" onclick="zoomIn()">+</button>
+          <button class="map-control-btn" onclick="zoomOut()">−</button>
+          <button class="map-control-btn" onclick="centerMap()">⊙</button>
+        </div>
+      </div>
+
+      <!-- Боковая панель -->
+      <div class="sidebar">
+        <!-- Карточка адресов -->
+        <div class="card">
+          <div class="card-title">Маршрут</div>
+          
+          <div class="input-group">
+            <label class="input-label">
+              <span class="input-icon">🔵</span>
+              Откуда
+            </label>
+            <input 
+              type="text" 
+              class="input-field" 
+              id="inputA"
+              placeholder="Укажите адрес отправления"
+              onfocus="showSuggestions()"
+              oninput="handleInput()"
+            />
+            <button class="clear-input-btn" onclick="clearInput('A')">×</button>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">
+              <span class="input-icon">🟣</span>
+              Куда
+            </label>
+            <input 
+              type="text" 
+              class="input-field" 
+              id="inputB"
+              placeholder="Укажите адрес назначения"
+              onfocus="showSuggestions()"
+              oninput="handleInput()"
+            />
+            <button class="clear-input-btn" onclick="clearInput('B')">×</button>
+          </div>
+
+          <button class="btn btn-primary" id="buildBtn" onclick="buildRoute()">
+            <span id="buildText">Построить маршрут</span>
+          </button>
+        </div>
+
+        <!-- Подсказки -->
+        <div class="card" id="suggestionsCard" style="display: none;">
+          <div class="card-title">Подсказки</div>
+          <div class="suggestions-list">
+            <div class="suggestion-item" onclick="selectSuggestion('проспект Чынгыза Айтматова, 56')">
+              <div class="suggestion-title">пр. Чынгыза Айтматова, 56</div>
+              <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+            </div>
+            <div class="suggestion-item" onclick="selectSuggestion('проспект Манаса, 23')">
+              <div class="suggestion-title">пр. Манаса, 23</div>
+              <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+            </div>
+            <div class="suggestion-item" onclick="selectSuggestion('улица Мира, 14')">
+              <div class="suggestion-title">ул. Мира, 14</div>
+              <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+            </div>
+            <div class="suggestion-item" onclick="selectSuggestion('Московская улица, 89')">
+              <div class="suggestion-title">Московская ул., 89</div>
+              <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+            </div>
+            <div class="suggestion-item" onclick="selectSuggestion('улица Тоголок Молдо, 45')">
+              <div class="suggestion-title">ул. Тоголок Молдо, 45</div>
+              <div class="suggestion-subtitle">Бишкек, Кыргызстан</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Информация о маршруте -->
+        <div class="card" id="routeCard" style="display: none;">
+          <div class="card-title">Детали</div>
+          <div class="route-info">
+            <div class="route-stat">
+              <div class="route-stat-label">Расстояние</div>
+              <div class="route-stat-value">12.3 км</div>
+            </div>
+            <div class="route-stat">
+              <div class="route-stat-label">Время</div>
+              <div class="route-stat-value">18 мин</div>
+            </div>
+            <div class="route-cost">
+              <div class="route-cost-label">Стоимость услуги</div>
+              <div class="route-cost-value">950 ₸</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Кнопка заказа -->
+        <button class="btn btn-success" id="orderBtn" onclick="placeOrder()" style="display: none;">
+          Заказать эвакуатор
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let routeBuilt = false;
+
+    function showSuggestions() {
+      document.getElementById('suggestionsCard').style.display = 'block';
+    }
+
+    function handleInput() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+      
+      if (inputA.length > 1 || inputB.length > 1) {
+        showSuggestions();
+      } else {
+        document.getElementById('suggestionsCard').style.display = 'none';
+      }
+    }
+
+    function selectSuggestion(text) {
+      const activeInput = document.activeElement;
+      if (activeInput && activeInput.classList.contains('input-field')) {
+        activeInput.value = text;
+      }
+      document.getElementById('suggestionsCard').style.display = 'none';
+    }
+
+    function clearInput(field) {
+      const input = document.getElementById('input' + field);
+      input.value = '';
+      input.focus();
+      
+      if (field === 'B' && routeBuilt) {
+        document.getElementById('routeCard').style.display = 'none';
+        document.getElementById('orderBtn').style.display = 'none';
+        document.getElementById('buildBtn').style.display = 'flex';
+        document.getElementById('routeLine').style.display = 'none';
+        routeBuilt = false;
+      }
+    }
+
+    function buildRoute() {
+      const inputA = document.getElementById('inputA').value;
+      const inputB = document.getElementById('inputB').value;
+
+      if (!inputA || !inputB) {
+        alert('Пожалуйста, заполните оба адреса');
+        return;
+      }
+
+      const btn = document.getElementById('buildBtn');
+      const text = document.getElementById('buildText');
+      
+      text.innerHTML = '<div class="loader"></div>';
+      btn.style.pointerEvents = 'none';
+      
+      setTimeout(() => {
+        document.getElementById('routeCard').style.display = 'block';
+        document.getElementById('orderBtn').style.display = 'flex';
+        document.getElementById('buildBtn').style.display = 'none';
+        document.getElementById('routeLine').style.display = 'block';
+        text.textContent = 'Построить маршрут';
+        btn.style.pointerEvents = 'auto';
+        routeBuilt = true;
+      }, 1200);
+    }
+
+    function placeOrder() {
+      if (confirm('Подтвердить заказ эвакуатора?')) {
+        alert('✅ Заказ принят!\n\nВодитель свяжется с вами в течение 5 минут.');
+      }
+    }
+
+    function zoomIn() {
+      console.log('Zoom in');
+    }
+
+    function zoomOut() {
+      console.log('Zoom out');
+    }
+
+    function centerMap() {
+      console.log('Center map');
+    }
+
+    // Закрытие подсказок при клике вне
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.input-field') && !e.target.closest('#suggestionsCard')) {
+        document.getElementById('suggestionsCard').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

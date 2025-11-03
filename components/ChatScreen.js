@@ -74,8 +74,8 @@ export default function ChatScreen() {
     const token = await AsyncStorage.getItem('tow_token');
         tokenRef.current = token || '';
     if (!tokenRef.current) return;
-        // Load history via /me to get userId then GET /users/{uid}/chat
-        const meRes = await fetch(base + '/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
+  // Load history via /users/me to get userId then GET /users/{uid}/chat
+  const meRes = await fetch(base + '/users/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
         if (!meRes.ok) throw new Error('unauthorized');
         const me = await meRes.json();
         const uid = me?.user?.id;
@@ -113,7 +113,7 @@ export default function ChatScreen() {
           // reload history
           try {
             if (tokenRef.current) {
-              const meRes = await fetch(base + '/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
+              const meRes = await fetch(base + '/users/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
               if (meRes.ok) {
                 const me = await meRes.json(); const uid = me?.user?.id; uidRef.current = uid || null;
                 const histRes = await fetch(`${base}/users/${uid}/chat`, { headers: { Authorization: `Bearer ${tokenRef.current}` } });
@@ -147,7 +147,7 @@ export default function ChatScreen() {
     try {
       let uid = uidRef.current;
       if (!uid) {
-        const meRes = await fetch(base + '/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
+  const meRes = await fetch(base + '/users/me', { headers: { Authorization: `Bearer ${tokenRef.current}` } });
         if (!meRes.ok) return;
         const me = await meRes.json();
         uid = me?.user?.id;

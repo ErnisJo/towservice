@@ -3,9 +3,36 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, BackHandler, Refres
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { Platform, NativeModules } from 'react-native';
-import Constants from 'expo-constants';
 import { getApiBase } from '../utils/apiBase';
+
+const coalesce = (...values) => {
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value !== null && value !== undefined && value !== '') {
+      return value;
+    }
+  }
+  return null;
+};
+
+const toDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const asNumber = typeof value === 'number' ? value : Number(value);
+  if (!Number.isNaN(asNumber) && String(value).trim() !== '' && Math.abs(asNumber) > 9999999999) {
+    const fromNumber = new Date(asNumber);
+    if (!Number.isNaN(fromNumber.getTime())) return fromNumber;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDate = (value) => {
+  const date = toDate(value);
+  return date ? date.toLocaleString() : '—';
+};
 
 export default function HistoryScreen() {
   const [items, setItems] = useState([]);
@@ -93,12 +120,23 @@ export default function HistoryScreen() {
       titleText = 'Без адреса';
     }
     const note = item?.details?.notes ?? item?.notes;
+    const createdRaw = coalesce(
+      item?.createdAt,
+      item?.created_at,
+      item?.details?.createdAt,
+      item?.details?.created_at,
+      item?.meta?.createdAt,
+      item?.meta?.created_at,
+      item?.timestamp,
+      item?.created
+    );
+    const createdLabel = formatDate(createdRaw);
     return (
       <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => navigation.navigate('OrderDetails', { id: item.id })}>
         <Text style={styles.cardTitle}>{titleText}</Text>
         {cost != null && <Text style={styles.cardText}>Сумма: {cost} сом</Text>}
         {note ? <Text style={styles.cardText}>Комментарий: {note}</Text> : null}
-        <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleString()}</Text>
+        <Text style={styles.cardDate}>{createdLabel}</Text>
       </TouchableOpacity>
     );
   };
