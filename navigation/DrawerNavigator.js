@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { TouchableOpacity, View, Text } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { TouchableOpacity, View, Text, Easing, Animated, InteractionManager, ActivityIndicator, StyleSheet } from 'react-native';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { createStackNavigator, CardStyleInterpolators, TransitionSpecs } from '@react-navigation/stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../components/HomeScreen';
 import HistoryScreen from '../components/HistoryScreen';
@@ -18,6 +19,159 @@ import { on as onEvent, off as offEvent } from '../utils/eventBus';
 // import { backgroundColor } from '../app.config';
 const Drawer = createDrawerNavigator();
 const Stack = createStackNavigator();
+
+// HOC для анимации экранов (как на сайтах - все смонтированы, анимируется opacity + transform)
+function withScreenAnimation(StackComponent) {
+  return function AnimatedStack(props) {
+    const opacity = useRef(new Animated.Value(0)).current; // Начинаем с 0 - невидим
+    const translateY = useRef(new Animated.Value(20)).current; // Начинаем снизу
+    const [isFocused, setIsFocused] = React.useState(false);
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    useFocusEffect(
+      React.useCallback(() => {
+        // Экран получил фокус - показываем загрузку
+        setIsFocused(true);
+        setIsLoading(true);
+        
+        // Мгновенно скрываем экран (чтобы не было видно предыдущий)
+        opacity.setValue(0);
+        translateY.setValue(20);
+        
+        // Ждём завершения рендеринга и всех взаимодействий
+        const task = InteractionManager.runAfterInteractions(() => {
+          // Рендеринг завершён - убираем загрузку и запускаем анимацию
+          setIsLoading(false);
+          
+          Animated.parallel([
+            Animated.timing(opacity, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }),
+            Animated.timing(translateY, {
+              toValue: 0,
+              duration: 600,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }),
+          ]).start();
+        });
+
+        return () => {
+          // Отменяем задачу если она ещё не выполнена
+          task.cancel();
+          
+          // Экран потерял фокус - мгновенно скрываем
+          setIsFocused(false);
+          setIsLoading(false);
+          opacity.setValue(0);
+          translateY.setValue(20);
+        };
+      }, [opacity, translateY])
+    );
+
+    return (
+      <>
+        {/* Белый фон пока экран рендерится */}
+        {isLoading && (
+          <View style={styles.loadingOverlay} />
+        )}
+        
+        {/* Сам экран с анимацией */}
+        <Animated.View
+          style={{
+            flex: 1,
+            opacity: isFocused ? opacity : 0, // Если не в фокусе - полностью прозрачен
+            transform: [{ translateY }],
+          }}
+          pointerEvents={isFocused ? 'auto' : 'none'}
+        >
+          <StackComponent {...props} />
+        </Animated.View>
+      </>
+    );
+  };
+}
+
+// Компонент-обёртка с анимацией для drawer экранов (как на сайтах - все смонтированы, видим только активный)
+function AnimatedScreenWrapper({ children, isActive }) {
+  const opacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const translateY = useRef(new Animated.Value(isActive ? 0 : 30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: isActive ? 1 : 0,
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: isActive ? 0 : 30,
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isActive, opacity, translateY]);
+
+  return (
+    <Animated.View 
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        opacity,
+        transform: [{ translateY }],
+      }}
+      pointerEvents={isActive ? 'auto' : 'none'}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+// Плавная анимация fade для переходов внутри стеков
+const FadeTransition = {
+  gestureEnabled: true,
+  gestureDirection: 'horizontal',
+  cardStyleInterpolator: ({ current, next }) => {
+    return {
+      cardStyle: {
+        opacity: current.progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 1],
+        }),
+      },
+      overlayStyle: {
+        opacity: current.progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 0.5],
+        }),
+      },
+    };
+  },
+  transitionSpec: {
+    open: {
+      animation: 'timing',
+      config: {
+        duration: 300,
+        easing: Easing.ease,
+      },
+    },
+    close: {
+      animation: 'timing',
+      config: {
+        duration: 250,
+        easing: Easing.ease,
+      },
+    },
+  },
+};
 
 // Drawer icon styling
 
@@ -49,15 +203,14 @@ function MenuButton({ navigation }) {
   );
 }
 
-function MapStack() {
+function MapStackBase(props) {
   return (
-  <Stack.Navigator initialRouteName="Home" screenOptions={{ gestureEnabled: true, animationEnabled: true, cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS, transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec } }}>
+    <Stack.Navigator initialRouteName="Home" screenOptions={{ ...FadeTransition }}>
       <Stack.Screen
         name="Home"
         component={HomeScreen}
         options={({ navigation }) => ({
-          title: 'Карта',
-      headerLeft: () => (<MenuButton navigation={navigation} />),
+          headerShown: false,
         })}
       />
   {/* Удалили страницу заявки. Заявка создаётся на карте. */}
@@ -65,15 +218,14 @@ function MapStack() {
   );
 }
 
-function HistoryStack() {
+const MapStack = withScreenAnimation(MapStackBase);
+
+function HistoryStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="History"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -82,8 +234,7 @@ function HistoryStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -93,15 +244,14 @@ function HistoryStack() {
   );
 }
 
-function SettingsStack() {
+const HistoryStack = withScreenAnimation(HistoryStackBase);
+
+function SettingsStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Settings"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (
           <Ionicons
             name="arrow-back"
@@ -121,8 +271,7 @@ function SettingsStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -155,15 +304,14 @@ function SettingsStack() {
   );
 }
 
-function InfoStack() {
+const SettingsStack = withScreenAnimation(SettingsStackBase);
+
+function InfoStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Info"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -172,8 +320,7 @@ function InfoStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -182,15 +329,14 @@ function InfoStack() {
   );
 }
 
-function SupportStack() {
+const InfoStack = withScreenAnimation(InfoStackBase);
+
+function SupportStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Support"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -199,8 +345,7 @@ function SupportStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -209,16 +354,14 @@ function SupportStack() {
   );
 }
 
+const SupportStack = withScreenAnimation(SupportStackBase);
 
-function LoginStack() {
+function LoginStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -227,8 +370,7 @@ function LoginStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -237,15 +379,14 @@ function LoginStack() {
   );
 }
 
-function RegisterStack() {
+const LoginStack = withScreenAnimation(LoginStackBase);
+
+function RegisterStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Register"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
     headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -254,8 +395,7 @@ function RegisterStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -264,16 +404,15 @@ function RegisterStack() {
   );
 }
 
+const RegisterStack = withScreenAnimation(RegisterStackBase);
+
 // Dedicated stack to open Profile directly (avoids passing through Settings)
-function ProfileStack() {
+function ProfileStackBase(props) {
   return (
     <Stack.Navigator
       initialRouteName="Profile"
       screenOptions={({ navigation }) => ({
-        gestureEnabled: true,
-        animationEnabled: true,
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+        ...FadeTransition,
         headerLeft: () => (<BackButton navigation={navigation} />),
       })}
     >
@@ -282,8 +421,7 @@ function ProfileStack() {
         component={BridgeToHome}
         options={{
           headerShown: false,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: { open: TransitionSpecs.TransitionIOSSpec, close: TransitionSpecs.TransitionIOSSpec },
+          ...FadeTransition,
           cardStyle: { backgroundColor: 'transparent' },
         }}
       />
@@ -291,6 +429,8 @@ function ProfileStack() {
     </Stack.Navigator>
   );
 }
+
+const ProfileStack = withScreenAnimation(ProfileStackBase);
 
 export default function DrawerNavigator() {
   function ProfileHeader({ navigation, stateIndex }) {
@@ -417,12 +557,16 @@ export default function DrawerNavigator() {
                   </View>
                 )}
                 onPress={() => {
-                  if (focused) navigation.closeDrawer();
-                  else {
+                  if (focused) {
+                    navigation.closeDrawer();
+                  } else {
                     const currentRoute = state.routes[state.index].name;
                     navigation.closeDrawer();
-                    // Переходим через мост внутри текущего стека для анимированного выхода на карту
-                    navigation.navigate(currentRoute, { screen: 'BridgeToHome' });
+                    // Небольшая задержка чтобы drawer закрылся перед анимацией
+                    setTimeout(() => {
+                      // Переходим через мост внутри текущего стека для анимированного выхода на карту
+                      navigation.navigate(currentRoute, { screen: 'BridgeToHome' });
+                    }, 100);
                   }
                 }}
               />
@@ -445,9 +589,16 @@ export default function DrawerNavigator() {
                 if (route.name === 'Настройки') {
                   // Always open the Settings root, not the last visited (e.g., Profile)
                   navigation.closeDrawer();
-                  navigation.navigate('Настройки', { screen: 'Settings' });
+                  // Небольшая задержка чтобы drawer закрылся перед анимацией
+                  setTimeout(() => {
+                    navigation.navigate('Настройки', { screen: 'Settings' });
+                  }, 100);
                 } else {
-                  navigation.navigate(route.name);
+                  navigation.closeDrawer();
+                  // Небольшая задержка чтобы drawer закрылся перед анимацией
+                  setTimeout(() => {
+                    navigation.navigate(route.name);
+                  }, 100);
                 }
               }}
             />
@@ -458,16 +609,114 @@ export default function DrawerNavigator() {
   }
 
   return (
-    <Drawer.Navigator drawerContent={(props) => <CustomDrawerContent {...props} />}>
-      <Drawer.Screen name="Карта" component={MapStack} options={{ headerShown: false }} />
-      <Drawer.Screen name="История заказов" component={HistoryStack} options={{ headerShown: false, title: 'История заказов' }} />
-      <Drawer.Screen name="Настройки" component={SettingsStack} options={{ headerShown: false, title: 'Настройки' }} />
-      <Drawer.Screen name="Информация" component={InfoStack} options={{ headerShown: false, title: 'Информация' }} />
-      <Drawer.Screen name="Служба поддержки" component={SupportStack} options={{ headerShown: false, title: 'Служба поддержки' }} />
-      <Drawer.Screen name="Вход" component={LoginStack} options={{ headerShown: false, title: 'Вход' }} />
-      <Drawer.Screen name="Регистрация" component={RegisterStack} options={{ headerShown: false, title: 'Регистрация' }} />
+    <Drawer.Navigator 
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
+      screenOptions={{
+        drawerType: 'front',
+        drawerPosition: 'right',
+        drawerStyle: {
+          width: 280,
+        },
+        overlayColor: 'rgba(0, 0, 0, 0.5)',
+        sceneContainerStyle: { backgroundColor: 'transparent' },
+        // Держим все экраны в памяти (как на сайтах)
+        unmountOnBlur: false,
+        // Используем кастомный рендер с анимациями
+        cardStyleInterpolator: ({ current }) => ({
+          cardStyle: {
+            opacity: current.progress,
+          },
+        }),
+      }}
+    >
+      <Drawer.Screen 
+        name="Карта" 
+        component={MapStack} 
+        options={{ 
+          headerShown: false,
+          // Карта всегда в памяти
+          unmountOnBlur: false,
+        }} 
+      />
+      <Drawer.Screen 
+        name="История заказов" 
+        component={HistoryStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'История заказов',
+          // Размонтировать при уходе чтобы не рендерилась
+          unmountOnBlur: true,
+        }} 
+      />
+      <Drawer.Screen 
+        name="Настройки" 
+        component={SettingsStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'Настройки',
+          unmountOnBlur: true,
+        }} 
+      />
+      <Drawer.Screen 
+        name="Информация" 
+        component={InfoStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'Информация',
+          unmountOnBlur: true,
+        }} 
+      />
+      <Drawer.Screen 
+        name="Служба поддержки" 
+        component={SupportStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'Служба поддержки',
+          unmountOnBlur: true,
+        }} 
+      />
+      <Drawer.Screen 
+        name="Вход" 
+        component={LoginStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'Вход',
+          unmountOnBlur: true,
+        }} 
+      />
+      <Drawer.Screen 
+        name="Регистрация" 
+        component={RegisterStack} 
+        options={{ 
+          headerShown: false, 
+          title: 'Регистрация',
+          unmountOnBlur: true,
+        }} 
+      />
   {/* Hidden route to open Profile directly */}
-  <Drawer.Screen name="Профиль" component={ProfileStack} options={{ headerShown: false, title: 'Профиль', drawerItemStyle: { display: 'none' } }} />
+  <Drawer.Screen 
+    name="Профиль" 
+    component={ProfileStack} 
+    options={{ 
+      headerShown: false, 
+      title: 'Профиль', 
+      drawerItemStyle: { display: 'none' },
+      unmountOnBlur: true,
+    }} 
+  />
     </Drawer.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'white',
+    opacity: 1,
+    zIndex: 9999,
+  },
+});
